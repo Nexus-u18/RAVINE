@@ -1,0 +1,2243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>RAVINE — Descent Into the Deep</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=DM+Mono:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:#000810;
+  color:#d4eeff;font-family:'Playfair Display',serif;overflow-x:hidden;cursor:none
+}
+/* Depth gradient canvas — fills exact scroll-interpolated color every frame */
+#depthCanvas{
+  position:fixed;inset:0;width:100%;height:100%;
+  pointer-events:none;z-index:0;
+}
+
+:root{
+  --blue:#00c8ff;--green:#00ffb0;--pink:#ff5fa0;--gold:#ffc94d;--white:#e8f4ff;
+  --glass:rgba(0,30,60,0.45);--gb:rgba(0,200,255,0.12);
+  --ease:cubic-bezier(0.16,1,0.3,1);--ease-back:cubic-bezier(0.34,1.56,0.64,1);
+}
+
+/* NOISE */
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9997;opacity:.3;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");}
+
+/* GLOBAL EDGE VIGNETTE */
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:9996;
+  background:radial-gradient(ellipse at 50% 40%,transparent 45%,rgba(0,3,8,.55) 100%);
+}
+
+/* section edge fades removed — JS scroll gradient handles blending */
+
+/* CURSOR */
+#cdot,#cring{position:fixed;top:0;left:0;pointer-events:none;z-index:9999;border-radius:50%;transform:translate(-50%,-50%)}
+#cdot{width:6px;height:6px;background:var(--blue);box-shadow:0 0 10px 3px var(--blue);transition:background .3s}
+#cring{width:38px;height:38px;border:1px solid rgba(0,200,255,.4);transition:width .3s var(--ease),height .3s var(--ease),border-color .3s}
+body.hov #cring{width:58px;height:58px;border-color:var(--pink)}
+body.hov #cdot{background:var(--pink);box-shadow:0 0 10px 3px var(--pink)}
+
+/* LOADER */
+#loader{position:fixed;inset:0;z-index:9998;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2rem;transition:opacity .9s,visibility .9s}
+#loader.out{opacity:0;visibility:hidden;pointer-events:none}
+.lsonar{position:relative;width:90px;height:90px;display:flex;align-items:center;justify-content:center}
+.lr{position:absolute;inset:0;border-radius:50%;border:1px solid var(--blue);animation:sonar 2.2s ease-out infinite}
+.lr:nth-child(2){animation-delay:.7s}.lr:nth-child(3){animation-delay:1.4s}
+.lc{width:10px;height:10px;border-radius:50%;background:var(--blue);box-shadow:0 0 20px 6px var(--blue)}
+@keyframes sonar{0%{transform:scale(.1);opacity:1}100%{transform:scale(4.5);opacity:0}}
+.llbl{font-family:'DM Mono',monospace;font-size:.65rem;letter-spacing:.4em;color:rgba(0,200,255,.5);text-transform:uppercase}
+.lbw{width:220px;height:1px;background:rgba(0,200,255,.1)}
+.lb{height:1px;width:0;background:var(--blue);box-shadow:0 0 8px var(--blue);animation:lbar 2.4s var(--ease) forwards}
+@keyframes lbar{to{width:100%}}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:200;padding:1.6rem 3rem;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(to bottom,rgba(0,0,10,.7),transparent)}
+.nlogo{font-family:'DM Mono',monospace;font-size:.75rem;letter-spacing:.4em;color:var(--blue);text-decoration:none;text-transform:uppercase}
+.nmeter{font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.2em;color:rgba(0,200,255,.5)}
+#ndepth{color:var(--blue);font-variant-numeric:tabular-nums;min-width:5ch;display:inline-block;text-align:right}
+
+/* SIDEBAR */
+#sb{position:fixed;right:2.2rem;top:50%;transform:translateY(-50%);z-index:200;display:flex;flex-direction:column;align-items:center;gap:.6rem}
+.sblbl{font-family:'DM Mono',monospace;font-size:.5rem;letter-spacing:.2em;color:rgba(0,200,255,.3);writing-mode:vertical-rl;transform:rotate(180deg);text-transform:uppercase}
+.sbtrack{width:2px;height:200px;background:rgba(0,200,255,.08);border-radius:2px;position:relative;overflow:hidden}
+.sbfill{position:absolute;top:0;left:0;right:0;border-radius:2px;background:linear-gradient(to bottom,var(--blue),var(--pink));transition:height .4s ease;box-shadow:0 0 8px rgba(0,200,255,.4)}
+.sbdots{display:flex;flex-direction:column;gap:0;margin-top:.3rem}
+.sbdot{width:7px;height:7px;border-radius:50%;margin-bottom:35px;border:1px solid rgba(0,200,255,.25);background:transparent;cursor:pointer;transition:all .3s}
+.sbdot:last-child{margin-bottom:0}
+.sbdot.on{background:var(--blue);border-color:var(--blue);box-shadow:0 0 12px var(--blue)}
+.sbdot:hover{border-color:var(--blue)}
+
+/* SECTIONS */
+section{position:relative;overflow:hidden;min-height:100vh;display:flex;align-items:center;justify-content:center}
+
+/* ── S1 SURFACE ─────────────────────────────────────── */
+#ss{background:transparent}
+#oceanCanvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;background:transparent}
+.bubble{position:absolute;border-radius:50%;border:1px solid rgba(255,255,255,.18);background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.1),transparent);animation:brise var(--bd,9s) ease-in infinite;animation-delay:var(--bdd,0s);pointer-events:none}
+@keyframes brise{0%{transform:translateY(110vh) translateX(0);opacity:0}12%{opacity:.75}82%{opacity:.25}100%{transform:translateY(-6vh) translateX(var(--drift,10px));opacity:0}}
+
+.hero{position:relative;z-index:10;text-align:center;padding:2rem}
+.hpre{font-family:'DM Mono',monospace;font-size:.65rem;letter-spacing:.5em;color:rgba(255,255,255,.5);text-transform:uppercase;margin-bottom:2rem;animation:fup 1s var(--ease) both;animation-delay:2.6s}
+.hh1{font-size:clamp(4.5rem,13vw,10.5rem);font-weight:900;line-height:.88;letter-spacing:-.03em;color:#fff;
+  text-shadow:0 0 120px rgba(0,180,255,.2),0 4px 40px rgba(0,0,0,.4);
+  animation:fup 1.1s var(--ease) both;animation-delay:2.8s}
+.hh1 .ac{color:var(--blue);font-style:italic}
+.hsub{font-size:clamp(.9rem,2vw,1.3rem);font-weight:400;font-style:italic;color:rgba(200,235,255,.6);margin-top:1.8rem;letter-spacing:.04em;animation:fup 1.1s var(--ease) both;animation-delay:3s}
+@keyframes fup{from{opacity:0;transform:translateY(50px)}to{opacity:1;transform:translateY(0)}}
+
+.scue{position:absolute;bottom:2.5rem;left:50%;transform:translateX(-50%);text-align:center;z-index:10;
+  font-family:'DM Mono',monospace;font-size:.58rem;letter-spacing:.35em;color:rgba(255,255,255,.38);text-transform:uppercase;
+  animation:fup .8s var(--ease) both;animation-delay:3.5s}
+.scline{width:1px;height:55px;background:linear-gradient(to bottom,rgba(255,255,255,.32),transparent);margin:.8rem auto 0;animation:scpulse 2.2s ease-in-out infinite}
+@keyframes scpulse{0%,100%{transform:scaleY(1);opacity:.4}50%{transform:scaleY(.6);opacity:1}}
+
+/* ── S2 EPIPELAGIC ─────────────────────────────────── */
+#se{background:transparent;min-height:130vh;flex-direction:column;justify-content:flex-start;align-items:center;padding:9rem 0 7rem;gap:5rem}
+
+.motes{position:absolute;inset:0;pointer-events:none}
+.mote{position:absolute;width:2px;height:2px;border-radius:50%;background:rgba(0,200,255,.55);animation:mfloat var(--md,12s) ease-in-out infinite;animation-delay:var(--mdd,0s)}
+@keyframes mfloat{0%{transform:translate(0,0);opacity:0}20%{opacity:.8}80%{opacity:.3}100%{transform:translate(var(--mx,20px),var(--my,-200px));opacity:0}}
+
+.kelp-bg{position:absolute;bottom:0;left:0;right:0;height:55%;pointer-events:none;z-index:1}
+.kelp{position:absolute;bottom:0;width:3px;border-radius:3px 3px 0 0;background:linear-gradient(to top,#0d5c35,#1a8050,transparent);transform-origin:bottom center;animation:kelsway var(--kd,5s) ease-in-out infinite;animation-delay:var(--kdd,0s)}
+@keyframes kelsway{0%,100%{transform:rotate(var(--kt,-5deg))}50%{transform:rotate(calc(var(--kt,-5deg)*-1.4)) scaleX(.85)}}
+
+.zh{text-align:center;padding:0 2rem;position:relative;z-index:10;width:100%;max-width:760px}
+.ztag{display:inline-flex;align-items:center;gap:.8rem;font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.4em;color:var(--blue);text-transform:uppercase;margin-bottom:1.2rem}
+.ztag::before,.ztag::after{content:'';display:block;width:40px;height:1px;background:var(--blue);opacity:.45}
+.zh2{font-size:clamp(2.8rem,8vw,6.5rem);font-weight:700;line-height:1;letter-spacing:-.025em;color:#fff}
+.zh2 .it{font-style:italic;color:var(--blue)}
+.zh2 .sub{font-size:.42em;font-weight:400;font-style:italic;color:rgba(255,255,255,.28);display:block;margin-top:.6rem;letter-spacing:.02em;line-height:1.4}
+.zhp{max-width:520px;margin:2.2rem auto 0;font-size:1.05rem;font-weight:400;font-style:italic;color:rgba(180,220,255,.58);line-height:1.9}
+
+.cgrid{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(2,1fr);gap:1.4rem;width:100%;max-width:860px;padding:0 3rem;position:relative;z-index:10;flex-shrink:0;align-items:stretch}
+.card{background:rgba(0,35,75,.5);border:1px solid rgba(0,200,255,.1);border-radius:3px;padding:1.6rem 1.3rem;backdrop-filter:blur(14px);transition:transform .4s var(--ease),border-color .4s,box-shadow .4s;cursor:default;position:relative;overflow:hidden;opacity:0;transform:translateY(28px);display:flex;flex-direction:column;min-height:180px}
+.card.vis{animation:cin .7s var(--ease) forwards}
+@keyframes cin{to{opacity:1;transform:none}}
+.card::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 50% 0%,rgba(0,200,255,.07),transparent 65%);opacity:0;transition:opacity .4s}
+.card::after{content:'';position:absolute;top:-1px;left:20%;right:20%;height:1px;background:linear-gradient(90deg,transparent,rgba(0,200,255,.55),transparent);opacity:0;transition:opacity .4s}
+.card:hover{transform:translateY(-10px)!important;border-color:rgba(0,200,255,.4);box-shadow:0 28px 65px rgba(0,0,0,.55),0 0 40px rgba(0,200,255,.07)}
+.card:hover::before,.card:hover::after{opacity:1}
+.cemoji{font-size:2.4rem;display:block;margin-bottom:1rem;animation:swim var(--sd,4s) ease-in-out infinite;animation-delay:var(--sdd,0s)}
+@keyframes swim{0%,100%{transform:translateX(0) rotate(0deg)}30%{transform:translateX(5px) rotate(3deg)}70%{transform:translateX(-4px) rotate(-3deg)}}
+.cname{font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.2em;color:var(--blue);text-transform:uppercase;margin-bottom:.5rem}
+.cfact{font-size:.82rem;font-style:italic;color:rgba(180,220,255,.58);line-height:1.55;flex:1}
+.cdepth{position:absolute;bottom:.7rem;right:.9rem;font-family:'DM Mono',monospace;font-size:.5rem;color:rgba(0,200,255,.25);letter-spacing:.1em}
+
+/* ── S3 MESOPELAGIC ────────────────────────────────── */
+#sm{background:transparent;min-height:150vh;flex-direction:column;align-items:center;padding:9rem 2rem 7rem;gap:6rem}
+
+.biofield{position:absolute;inset:0;pointer-events:none}
+.bdot{position:absolute;border-radius:50%;animation:bpulse var(--bp,3s) ease-in-out infinite;animation-delay:var(--bpd,0s)}
+@keyframes bpulse{0%,100%{opacity:.1;transform:scale(1)}50%{opacity:1;transform:scale(1.7)}}
+
+.pring{position:absolute;right:3%;top:45%;z-index:10;transform:translateY(-50%)}
+.psvg{display:block;animation:protate 30s linear infinite}
+@keyframes protate{to{transform:rotate(360deg)}}
+.pcenter{position:absolute;inset:20px;border-radius:50%;background:rgba(0,10,25,.85);border:1px solid rgba(0,200,255,.1);display:flex;flex-direction:column;align-items:center;justify-content:center;backdrop-filter:blur(10px)}
+.pval{font-family:'DM Mono',monospace;font-size:1.5rem;color:var(--blue);letter-spacing:-.02em}
+.punit{font-family:'DM Mono',monospace;font-size:.5rem;color:rgba(0,200,255,.42);letter-spacing:.2em;margin-top:.1rem}
+.plbl{font-family:'DM Mono',monospace;font-size:.52rem;color:rgba(0,200,255,.32);letter-spacing:.15em;text-transform:uppercase;margin-top:.5rem}
+
+.explorer{width:100%;max-width:600px;background:rgba(0,10,25,.78);border:1px solid rgba(0,200,255,.12);border-radius:4px;padding:2.5rem;backdrop-filter:blur(20px);box-shadow:0 40px 100px rgba(0,0,0,.6),inset 0 1px 0 rgba(0,200,255,.08);position:relative;z-index:10}
+.etitle{font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.35em;color:var(--blue);text-transform:uppercase;margin-bottom:2rem;display:flex;align-items:center;gap:.6rem}
+.etitle::after{content:'';flex:1;height:1px;background:rgba(0,200,255,.12)}
+.erow{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:1.5rem}
+.enum{font-size:3.5rem;font-weight:700;color:#fff;line-height:1;letter-spacing:-.04em}
+.enum span{font-size:1.1rem;color:var(--blue);font-weight:400;margin-left:.2rem}
+.eright{text-align:right}
+.ezone{font-style:italic;color:rgba(180,220,255,.62);font-size:1rem}
+.epres{font-family:'DM Mono',monospace;font-size:.55rem;color:rgba(0,200,255,.38);letter-spacing:.15em;margin-top:.2rem}
+.drange{-webkit-appearance:none;appearance:none;width:100%;height:3px;background:rgba(0,200,255,.1);border-radius:3px;outline:none;cursor:pointer;margin-bottom:1.8rem}
+.drange::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--blue);cursor:pointer;box-shadow:0 0 0 4px rgba(0,200,255,.15),0 0 22px var(--blue);transition:transform .2s var(--ease-back)}
+.drange::-webkit-slider-thumb:hover{transform:scale(1.3)}
+.drange::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--blue);border:none;box-shadow:0 0 22px var(--blue)}
+.efact{font-size:.9rem;font-style:italic;color:rgba(180,220,255,.58);line-height:1.8;padding-top:1.2rem;border-top:1px solid rgba(0,200,255,.08);min-height:72px;transition:opacity .25s}
+.etags{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1rem}
+.etag{font-family:'DM Mono',monospace;font-size:.52rem;letter-spacing:.12em;padding:.25rem .7rem;border:1px solid rgba(0,200,255,.18);color:rgba(0,200,255,.52);text-transform:uppercase;border-radius:2px;transition:all .3s;cursor:default}
+.etag:hover{border-color:var(--blue);color:var(--blue);background:rgba(0,200,255,.05)}
+
+/* ── S4 BATHYPELAGIC ───────────────────────────────── */
+#sb2{background:transparent;min-height:140vh;flex-direction:column;align-items:center;justify-content:center;padding:9rem 2rem 7rem}
+
+.dvignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 45%,transparent 10%,rgba(0,2,4,.96) 60%);z-index:5}
+.sgrid{position:absolute;inset:0;pointer-events:none;z-index:2;background-image:linear-gradient(rgba(0,200,255,.022) 1px,transparent 1px),linear-gradient(90deg,rgba(0,200,255,.022) 1px,transparent 1px);background-size:60px 60px;animation:gpan 22s linear infinite}
+@keyframes gpan{from{background-position:0 0}to{background-position:60px 60px}}
+.aglow{position:absolute;top:22%;left:57%;z-index:4;pointer-events:none;width:8px;height:8px;border-radius:50%;background:var(--gold);box-shadow:0 0 30px 12px rgba(255,200,60,.45),0 0 80px 30px rgba(255,180,40,.18),0 0 160px 60px rgba(255,160,20,.06);animation:agpulse 2.8s ease-in-out infinite}
+@keyframes agpulse{0%,100%{box-shadow:0 0 30px 12px rgba(255,200,60,.45),0 0 80px 30px rgba(255,180,40,.18)}50%{box-shadow:0 0 55px 22px rgba(255,200,60,.7),0 0 130px 55px rgba(255,180,40,.28)}}
+
+.cspot{position:absolute;z-index:10;cursor:pointer;transition:transform .35s var(--ease)}
+.cspot:hover{transform:scale(1.1)}
+.sptrig{width:54px;height:54px;border-radius:50%;border:1px solid rgba(0,255,176,.22);background:rgba(0,20,12,.5);display:flex;align-items:center;justify-content:center;font-size:1.6rem;backdrop-filter:blur(6px);animation:sppulse var(--sp,3s) ease-in-out infinite;animation-delay:var(--spd,0s);transition:border-color .3s,box-shadow .3s}
+.cspot:hover .sptrig{border-color:var(--green);box-shadow:0 0 30px rgba(0,255,176,.18)}
+@keyframes sppulse{0%,100%{box-shadow:0 0 0 0 rgba(0,255,176,.3)}50%{box-shadow:0 0 0 20px rgba(0,255,176,0)}}
+.sppop{position:absolute;bottom:calc(100% + .8rem);left:50%;transform:translateX(-50%) translateY(8px);background:rgba(0,15,10,.92);border:1px solid rgba(0,255,176,.18);padding:1rem 1.2rem;border-radius:3px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .3s,transform .3s var(--ease);backdrop-filter:blur(16px);box-shadow:0 20px 50px rgba(0,0,0,.6)}
+.cspot:hover .sppop{opacity:1;transform:translateX(-50%) translateY(0)}
+.spname{font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.2em;color:var(--green);text-transform:uppercase}
+.spfact{font-size:.82rem;font-style:italic;color:rgba(180,220,255,.52);margin-top:.35rem;max-width:200px;white-space:normal;line-height:1.5}
+
+.srow{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid rgba(0,200,255,.06);width:100%;max-width:740px;position:relative;z-index:10;background:rgba(0,200,255,.04)}
+.stat{padding:2.2rem 1.5rem;text-align:center;background:rgba(0,5,15,.88);border-right:1px solid rgba(0,200,255,.06);backdrop-filter:blur(10px);transition:background .3s;cursor:default}
+.stat:last-child{border-right:none}
+.stat:hover{background:rgba(0,15,40,.9)}
+.stn{font-size:2.6rem;font-weight:700;color:#fff;line-height:1;margin-bottom:.4rem}
+.stn em{font-style:normal;color:var(--blue);font-size:1.1rem;vertical-align:middle;margin-left:.1rem}
+.stl{font-family:'DM Mono',monospace;font-size:.56rem;letter-spacing:.18em;color:rgba(0,200,255,.33);text-transform:uppercase;line-height:1.5}
+
+/* ── S5 HADAL ──────────────────────────────────────── */
+#sh{background:radial-gradient(ellipse at 35% 60%,rgba(255,90,160,.04) 0%,transparent 45%),radial-gradient(ellipse at 75% 35%,rgba(0,200,255,.025) 0%,transparent 40%);min-height:100vh}
+
+.tlines{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.tl{position:absolute;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent 0%,rgba(255,90,160,.05) 20%,rgba(255,90,160,.1) 50%,rgba(255,90,160,.05) 80%,transparent 100%);animation:tmove var(--tm,8s) linear infinite;animation-delay:var(--tmd,0s)}
+@keyframes tmove{from{transform:translateY(-100px)}to{transform:translateY(100vh)}}
+
+.hadal{position:relative;z-index:10;text-align:center;padding:6rem 2rem;max-width:780px;width:100%}
+.htag{font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.45em;color:rgba(255,90,160,.45);text-transform:uppercase;margin-bottom:2.2rem;display:inline-block}
+.hh2{font-size:clamp(3.5rem,9vw,8rem);font-weight:900;line-height:.9;letter-spacing:-.03em;color:rgba(160,180,210,.72);margin-bottom:2rem;text-shadow:0 0 60px rgba(255,90,160,.06)}
+.hbody{font-size:1.1rem;font-style:italic;color:rgba(100,130,170,.45);line-height:1.95;margin-bottom:3rem;max-width:560px;margin-left:auto;margin-right:auto}
+
+.hgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin-bottom:3.5rem;background:rgba(255,90,160,.06)}
+.htile{background:rgba(0,1,4,.95);padding:1.8rem 1rem;text-align:center;transition:background .3s,transform .35s var(--ease);cursor:default;opacity:.7}
+.htile:hover{background:rgba(255,90,160,.04);transform:translateY(-5px)}
+.hicon{font-size:1.8rem;display:block;margin-bottom:.7rem}
+.hval{font-family:'DM Mono',monospace;font-size:1rem;color:rgba(255,90,160,.5);margin-bottom:.3rem}
+.hlbl{font-family:'DM Mono',monospace;font-size:.52rem;letter-spacing:.15em;color:rgba(255,90,160,.22);text-transform:uppercase}
+
+.cta{display:inline-flex;align-items:center;gap:.6rem;padding:.9rem 2.2rem;border:1px solid rgba(255,90,160,.18);color:rgba(255,90,160,.4);font-family:'DM Mono',monospace;font-size:.62rem;letter-spacing:.3em;text-transform:uppercase;text-decoration:none;transition:all .35s var(--ease);position:relative;overflow:hidden}
+.cta::before{content:'';position:absolute;inset:0;background:rgba(255,90,160,.06);transform:translateX(-101%);transition:transform .35s var(--ease)}
+.cta:hover{border-color:var(--pink);color:var(--pink);box-shadow:0 0 40px rgba(255,90,160,.1)}
+.cta:hover::before{transform:translateX(0)}
+
+.foot{position:absolute;bottom:1.8rem;left:50%;transform:translateX(-50%);font-family:'DM Mono',monospace;font-size:.52rem;letter-spacing:.25em;color:rgba(0,200,255,.14);white-space:nowrap;text-transform:uppercase}
+
+/* REVEALS */
+/* .rev initial state managed by GSAP — do not re-add opacity:0 here */
+.rev.show{opacity:1;transform:none}
+
+
+
+@media(max-width:900px){nav{padding:1.2rem 1.5rem}#sb{display:none}.hgrid{grid-template-columns:repeat(2,1fr)}.srow{grid-template-columns:1fr}.stat{border-right:none;border-bottom:1px solid rgba(0,200,255,.06)}.stat:last-child{border-bottom:none}.pring{display:none}.explorer{margin-right:0!important}#sm{padding:7rem 1.5rem 5rem}#se{padding:7rem 0 5rem}.cgrid{grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(3,1fr);padding:0 2rem}}@media(max-width:520px){.cgrid{grid-template-columns:1fr 1fr;grid-template-rows:repeat(3,1fr);padding:0 1rem;gap:1rem}}
+@media(max-width:520px){.hh1{font-size:3.5rem}.hh2{font-size:3rem}.enum{font-size:2.6rem}.cgrid{grid-template-columns:1fr 1fr}}
+
+/* ── SOUND TOGGLE ─────────────────────────────────── */
+#soundBtn{
+  position:fixed;bottom:2.2rem;left:2.2rem;z-index:300;
+  width:44px;height:44px;border-radius:50%;
+  border:1px solid rgba(0,200,255,.3);
+  background:rgba(0,10,25,.65);
+  backdrop-filter:blur(14px);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:border-color .35s,box-shadow .35s,transform .25s;
+  outline:none;
+}
+#soundBtn:hover{
+  border-color:rgba(0,200,255,.7);
+  box-shadow:0 0 22px rgba(0,200,255,.2);
+  transform:scale(1.08);
+}
+#soundBtn.playing{
+  border-color:var(--blue);
+  box-shadow:0 0 28px rgba(0,200,255,.25),inset 0 0 12px rgba(0,200,255,.06);
+}
+/* animated wave bars inside button */
+.sbars{display:flex;align-items:center;gap:2px;height:18px}
+.sbar{
+  width:2.5px;border-radius:2px;
+  background:rgba(0,200,255,.5);
+  transition:background .3s;
+}
+#soundBtn.playing .sbar{background:var(--blue);}
+#soundBtn.playing .sbar:nth-child(1){animation:barBounce 1.1s ease-in-out infinite}
+#soundBtn.playing .sbar:nth-child(2){animation:barBounce 1.1s ease-in-out infinite .18s}
+#soundBtn.playing .sbar:nth-child(3){animation:barBounce 1.1s ease-in-out infinite .06s}
+#soundBtn.playing .sbar:nth-child(4){animation:barBounce 1.1s ease-in-out infinite .28s}
+#soundBtn.playing .sbar:nth-child(5){animation:barBounce 1.1s ease-in-out infinite .12s}
+@keyframes barBounce{
+  0%,100%{height:4px;opacity:.45}
+  50%{height:16px;opacity:1}
+}
+.sbar:nth-child(1){height:6px}
+.sbar:nth-child(2){height:12px}
+.sbar:nth-child(3){height:16px}
+.sbar:nth-child(4){height:10px}
+.sbar:nth-child(5){height:7px}
+
+/* depth label that pulses when sound changes zone */
+#soundZoneLabel{
+  position:fixed;bottom:2rem;left:4.4rem;z-index:300;
+  font-family:'DM Mono',monospace;font-size:.52rem;
+  letter-spacing:.22em;color:rgba(0,200,255,.5);
+  text-transform:uppercase;
+  opacity:0;transition:opacity .5s;
+  pointer-events:none;
+  white-space:nowrap;
+}
+#soundZoneLabel.show{opacity:1}
+
+/* EPIPELAGIC CREATURE CANVAS */
+#epiCanvas{
+  position:absolute;inset:0;width:100%;height:100%;
+  pointer-events:none;z-index:2;
+}
+</style>
+<!-- GSAP + ScrollTrigger -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<!-- Three.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+<div id="cdot"></div><div id="cring"></div>
+
+<!-- CONTINUOUS DEPTH GRADIENT -->
+
+<!-- DEPTH GRADIENT CANVAS (z:0) + THREE.JS PARTICLES (z:1) -->
+<canvas id="depthCanvas"></canvas>
+<canvas id="threeCanvas" style="position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;opacity:0.50;"></canvas>
+
+<!-- LOADER -->
+<div id="loader">
+  <div class="lsonar"><div class="lr"></div><div class="lr"></div><div class="lr"></div><div class="lc"></div></div>
+  <div class="llbl">Calibrating depth sensors</div>
+  <div class="lbw"><div class="lb"></div></div>
+</div>
+
+<!-- NAV -->
+<nav>
+  <a href="#ss" class="nlogo">RAVINE</a>
+  <div class="nmeter">DEPTH&ensp;<span id="ndepth">0</span>m</div>
+</nav>
+
+
+
+
+<!-- SOUND TOGGLE -->
+<button id="soundBtn" aria-label="Toggle ocean ambience">
+  <div class="sbars">
+    <div class="sbar"></div>
+    <div class="sbar"></div>
+    <div class="sbar"></div>
+    <div class="sbar"></div>
+    <div class="sbar"></div>
+  </div>
+</button>
+<div id="soundZoneLabel">Surface</div>
+
+<!-- SIDEBAR -->
+<div id="sb">
+  <div class="sblbl">Depth</div>
+  <div class="sbtrack"><div class="sbfill" id="sbfill" style="height:0%"></div></div>
+  <div class="sbdots">
+    <div class="sbdot on" data-s="ss"></div>
+    <div class="sbdot" data-s="se"></div>
+    <div class="sbdot" data-s="sm"></div>
+    <div class="sbdot" data-s="sb2"></div>
+    <div class="sbdot" data-s="sh"></div>
+  </div>
+</div>
+
+<!-- ══ SURFACE ══ -->
+<section id="ss">
+  <canvas id="oceanCanvas"></canvas>
+  <div id="bwrap"></div>
+  <div class="hero">
+    <div class="hpre">An Ocean Descent</div>
+    <h1 class="hh1">INTO THE<br><span class="ac">RAVINE</span></h1>
+    <p class="hsub">A journey through the deepest layers of our world</p>
+  </div>
+  <div class="scue">Descend<div class="scline"></div></div>
+</section>
+
+<!-- ══ EPIPELAGIC ══ -->
+<section id="se">
+  <canvas id="epiCanvas"></canvas>
+  <div class="motes" id="motesWrap"></div>
+  <div class="kelp-bg" id="kelpWrap"></div>
+  <div class="zh rev">
+    <div class="ztag">0 — 200 metres</div>
+    <h2 class="zh2 rev d1">The <span class="it">Sunlit</span> Zone<span class="sub">Epipelagic</span></h2>
+    <p class="zhp rev d2">Where sunlight reaches and life is most abundant. Coral gardens, sea turtles, dolphins and dazzling schools of fish inhabit this radiant upper ocean.</p>
+  </div>
+  <div class="cgrid rev d3" id="cgrid">
+    <div class="card" style="--sd:3.5s;--sdd:0s"><span class="cemoji">🐠</span><div class="cname">Clownfish</div><div class="cfact">Immune to anemone stings — lives protected inside their lethal tentacles.</div><div class="cdepth">15m</div></div>
+    <div class="card" style="--sd:4s;--sdd:.5s"><span class="cemoji">🐢</span><div class="cname">Sea Turtle</div><div class="cfact">Holds breath up to 7 hours. Navigates entire oceans by Earth's magnetic field.</div><div class="cdepth">50m</div></div>
+    <div class="card" style="--sd:4.5s;--sdd:1s"><span class="cemoji">🦈</span><div class="cname">Blue Shark</div><div class="cfact">Travels 2,000 km+ in annual migrations across entire ocean basins.</div><div class="cdepth">150m</div></div>
+    <div class="card" style="--sd:5s;--sdd:.3s"><span class="cemoji">🐬</span><div class="cname">Dolphin</div><div class="cfact">Echolocates at 200,000 Hz — far beyond the range of human hearing.</div><div class="cdepth">20m</div></div>
+    <div class="card" style="--sd:3.8s;--sdd:.8s"><span class="cemoji">🐙</span><div class="cname">Octopus</div><div class="cfact">Three hearts, blue blood, and can edit its own RNA sequences in real time.</div><div class="cdepth">100m</div></div>
+    <div class="card" style="--sd:4.2s;--sdd:1.3s"><span class="cemoji">🪸</span><div class="cname">Coral</div><div class="cfact">Not a plant — coral reefs are colonies of tiny living animals called polyps.</div><div class="cdepth">30m</div></div>
+  </div>
+</section>
+
+<!-- ══ MESOPELAGIC ══ -->
+<section id="sm">
+  <div class="biofield" id="bioWrap"></div>
+  <div class="pring rev d2">
+    <svg class="psvg" width="130" height="130" viewBox="0 0 130 130">
+      <circle cx="65" cy="65" r="60" fill="none" stroke="rgba(0,200,255,.06)" stroke-width="1"/>
+      <circle cx="65" cy="65" r="56" fill="none" stroke="rgba(0,200,255,.04)" stroke-width="1"/>
+      <circle cx="65" cy="65" r="58" fill="none" stroke="rgba(0,200,255,.14)" stroke-width="1" stroke-dasharray="6 14" stroke-linecap="round"/>
+      <g stroke="rgba(0,200,255,.2)" stroke-width="1">
+        <line x1="65" y1="4" x2="65" y2="14"/><line x1="65" y1="116" x2="65" y2="126"/>
+        <line x1="4" y1="65" x2="14" y2="65"/><line x1="116" y1="65" x2="126" y2="65"/>
+        <line x1="18" y1="18" x2="26" y2="26"/><line x1="104" y1="104" x2="112" y2="112"/>
+        <line x1="104" y1="18" x2="112" y2="26"/><line x1="18" y1="104" x2="26" y2="112"/>
+      </g>
+    </svg>
+    <div class="pcenter"><div class="pval" id="pval">20</div><div class="punit">ATM</div></div>
+    <div class="plbl">Pressure</div>
+  </div>
+  <div class="zh rev" style="z-index:10;position:relative">
+    <div class="ztag">200 — 1,000 metres</div>
+    <h2 class="zh2 rev d1">The <span class="it">Twilight</span> Zone<span class="sub">Mesopelagic</span></h2>
+    <p class="zhp rev d2">Sunlight fades to a ghostly blue. Pressure mounts. Life evolves bioluminescence — living light — to hunt, lure, and vanish in the perpetual dusk.</p>
+  </div>
+  <div class="explorer rev d3" style="margin-right:160px;">
+    <div class="etitle">Depth Explorer</div>
+    <div class="erow">
+      <div class="enum" id="enum">200<span>m</span></div>
+      <div class="eright"><div class="ezone" id="ezone">Upper Mesopelagic</div><div class="epres" id="epres">≈ 20 ATM</div></div>
+    </div>
+    <input type="range" class="drange" id="dslider" min="200" max="1000" value="200" step="10">
+    <div class="efact" id="efact">At 200m sunlight is a faint blue ghost. Creatures evolve enormous eyes to capture every last photon in the perpetual twilight.</div>
+    <div class="etags" id="etags"></div>
+  </div>
+</section>
+
+<!-- ══ BATHYPELAGIC ══ -->
+<section id="sb2">
+  <div class="sgrid"></div>
+  <div class="dvignette"></div>
+  <div class="aglow"></div>
+  <div class="cspot" style="top:28%;left:18%;--sp:3.5s;--spd:0s"><div class="sptrig">🦑</div><div class="sppop"><div class="spname">Giant Squid</div><div class="spfact">Eyes as large as dinner plates — the biggest in the entire animal kingdom.</div></div></div>
+  <div class="cspot" style="top:60%;left:72%;--sp:4s;--spd:.8s"><div class="sptrig">🐟</div><div class="sppop"><div class="spname">Viperfish</div><div class="spfact">Uses photophores along its belly to mimic downwelling light and disappear.</div></div></div>
+  <div class="cspot" style="top:75%;left:28%;--sp:3s;--spd:1.5s"><div class="sptrig">🦐</div><div class="sppop"><div class="spname">Vampire Squid</div><div class="spfact">Ancient cephalopod — neither squid nor octopus. Fossil record: 300 million years.</div></div></div>
+  <div class="cspot" style="top:40%;left:80%;--sp:5s;--spd:.4s"><div class="sptrig">🐡</div><div class="sppop"><div class="spname">Anglerfish</div><div class="spfact">Its glowing lure contains a colony of bioluminescent bacteria living in symbiosis.</div></div></div>
+  <div style="position:relative;z-index:10;display:flex;flex-direction:column;align-items:center;gap:3.5rem;width:100%;max-width:780px">
+    <div class="zh rev">
+      <div class="ztag" style="color:var(--gold)">1,000 — 4,000 metres</div>
+      <h2 class="zh2 rev d1" style="color:rgba(255,255,255,.92)">The <span style="color:var(--gold);font-style:italic">Midnight</span> Zone<span class="sub">Bathypelagic</span></h2>
+      <p class="zhp rev d2" style="color:rgba(180,180,200,.43)">Total darkness. Crushing pressure. No sunlight has touched this water since the ocean formed. Yet life persists — luminous, alien, endlessly strange.</p>
+    </div>
+    <div class="srow rev d3">
+      <div class="stat"><div class="stn">400<em>atm</em></div><div class="stl">Pressure at<br>4,000m</div></div>
+      <div class="stat"><div class="stn">2°<em>C</em></div><div class="stl">Near-freezing<br>Temperature</div></div>
+      <div class="stat"><div class="stn">0<em>lux</em></div><div class="stl">Absolute<br>Darkness</div></div>
+    </div>
+    <p class="rev d4" style="font-family:'DM Mono',monospace;font-size:.56rem;letter-spacing:.18em;color:rgba(0,255,176,.22);text-align:center">↑ &nbsp; Hover the glowing points to reveal what lurks in the dark &nbsp; ↑</p>
+  </div>
+</section>
+
+<!-- ══ HADAL ══ -->
+<section id="sh">
+  <div class="tlines" id="tlWrap"></div>
+  <div class="hadal">
+    <div class="htag rev">6,000 — 11,034 metres</div>
+    <h2 class="hh2 rev d1">Beyond the<br>Abyss</h2>
+    <p class="hbody rev d2">The hadal zone — named for Hades, god of the underworld — plunges into ocean trenches so deep they could swallow Mount Everest whole. Amphipods thrive in absolute darkness, feeding on organic snow that drifts down from the living world above.</p>
+    <div class="hgrid rev d3">
+      <div class="htile"><span class="hicon">🌊</span><div class="hval">11,034m</div><div class="hlbl">Challenger Deep</div></div>
+      <div class="htile"><span class="hicon">⚡</span><div class="hval">1,100 atm</div><div class="hlbl">Max Pressure</div></div>
+      <div class="htile"><span class="hicon">🧬</span><div class="hval">200+</div><div class="hlbl">Unique Species</div></div>
+      <div class="htile"><span class="hicon">🕳️</span><div class="hval">37</div><div class="hlbl">Known Trenches</div></div>
+    </div>
+    <a href="#ss" class="cta rev d4">↑ &ensp; Ascend to the Surface</a>
+  </div>
+  <div class="foot">BATHYS — A Depth Odyssey</div>
+</section>
+
+<script>
+
+
+
+/* ══════════════════════════════════════════════════════
+   CONTINUOUS DEPTH GRADIENT CANVAS
+   Paints the background every frame as a vertical
+   gradient that maps the ENTIRE page height to ocean
+   depth colours. The viewport window slides over it —
+   so every pixel is always the mathematically correct
+   colour for that depth. Zero discrete jumps.
+══════════════════════════════════════════════════════ */
+(function(){
+  const cv = document.getElementById('depthCanvas');
+  if(!cv) return;
+  const cx = cv.getContext('2d');
+
+  // The full ocean colour spectrum from surface → hadal void
+  // Each stop: [scrollFraction 0-1, r, g, b]
+  const STOPS = [
+    [0.00,  10, 62,  94],   // surface — deep cerulean
+    [0.06,   7, 51,  80],
+    [0.13,   5, 40,  64],   // entering sunlit zone
+    [0.20,   6, 58,  82],   // teal lift
+    [0.28,   7, 64,  96],   // mid sunlit
+    [0.36,   5, 47,  72],
+    [0.44,   3, 29,  48],   // entering twilight
+    [0.52,   2, 18,  32],   // mid twilight
+    [0.60,   1, 12,  24],   // deep twilight
+    [0.68,   1,  9,  20],   // midnight zone
+    [0.76,   1,  7,  16],
+    [0.84,   1,  5,  11],   // deep midnight
+    [0.90,   1,  4,   8],
+    [0.95,   0,  3,   5],   // hadal
+    [1.00,   0,  2,   4],   // void
+  ];
+
+  // Interpolate a colour at any scroll fraction 0-1
+  function depthColor(frac){
+    frac = Math.max(0, Math.min(1, frac));
+    let i = 0;
+    while(i < STOPS.length-2 && STOPS[i+1][0] <= frac) i++;
+    const a = STOPS[i], b = STOPS[i+1];
+    const t = (frac - a[0]) / (b[0] - a[0]);
+    return [
+      Math.round(a[1] + (b[1]-a[1])*t),
+      Math.round(a[2] + (b[2]-a[2])*t),
+      Math.round(a[3] + (b[3]-a[3])*t),
+    ];
+  }
+
+  let W = 0, H = 0;
+  function resize(){
+    W = cv.width  = window.innerWidth;
+    H = cv.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  function paint(){
+    requestAnimationFrame(paint);
+
+    const scrollTop  = window.scrollY;
+    const pageH      = document.documentElement.scrollHeight;
+    const vpH        = window.innerHeight;
+    const maxScroll  = pageH - vpH;
+
+    // Build a gradient that covers the viewport height.
+    // Top of viewport = current scroll fraction,
+    // Bottom = scroll fraction at (scrollTop + vpH)
+    const fracTop = maxScroll > 0 ? scrollTop / maxScroll : 0;
+    const fracBot = maxScroll > 0 ? (scrollTop + vpH) / maxScroll : 0;
+
+    const [rt,gt,bt] = depthColor(fracTop);
+    const [rm,gm,bm] = depthColor((fracTop+fracBot)/2);
+    const [rb,gb,bb] = depthColor(fracBot);
+
+    // 3-stop gradient covers the viewport perfectly
+    const grad = cx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0,   `rgb(${rt},${gt},${bt})`);
+    grad.addColorStop(0.5, `rgb(${rm},${gm},${bm})`);
+    grad.addColorStop(1,   `rgb(${rb},${gb},${bb})`);
+
+    cx.fillStyle = grad;
+    cx.fillRect(0, 0, W, H);
+  }
+  paint();
+
+  console.log('[RAVINE] Continuous depth gradient initialised ✓');
+})();
+
+/* CURSOR */
+const cdot=document.getElementById('cdot'),cring=document.getElementById('cring');
+let mx=0,my=0,rx=0,ry=0;
+document.addEventListener('mousemove',e=>{mx=e.clientX;my=e.clientY;cdot.style.cssText=`left:${mx}px;top:${my}px`});
+(function lag(){rx+=(mx-rx)*.11;ry+=(my-ry)*.11;cring.style.left=rx+'px';cring.style.top=ry+'px';requestAnimationFrame(lag)})();
+document.querySelectorAll('a,button,.card,.cspot,.htile,.cta,.sbdot').forEach(el=>{
+  el.addEventListener('mouseenter',()=>document.body.classList.add('hov'));
+  el.addEventListener('mouseleave',()=>document.body.classList.remove('hov'));
+});
+
+/* LOADER */
+window.addEventListener('load',()=>setTimeout(()=>document.getElementById('loader').classList.add('out'),2700));
+
+/* OCEAN CANVAS — realistic underwater background */
+(function(){
+  const cv = document.getElementById('oceanCanvas');
+  if(!cv) return;
+  const cx = cv.getContext('2d');
+  let W, H, t = 0;
+
+  function resize(){ W = cv.width = cv.offsetWidth; H = cv.height = cv.offsetHeight; }
+  resize();
+  window.addEventListener('resize', resize);
+
+  /* ── GOD RAY config ── */
+  const RAYS = [
+    {x:.18, w:90,  angle:-22, speed:.0004, base:.08},
+    {x:.30, w:60,  angle:-14, speed:.0003, base:.06},
+    {x:.44, w:140, angle:-6,  speed:.0005, base:.12},
+    {x:.55, w:50,  angle: 2,  speed:.0004, base:.07},
+    {x:.63, w:110, angle: 9,  speed:.00035,base:.10},
+    {x:.76, w:70,  angle:17,  speed:.0003, base:.06},
+    {x:.88, w:55,  angle:24,  speed:.0004, base:.05},
+  ];
+
+  /* ── CAUSTIC points on a grid ── */
+  const COLS = 18, ROWS = 12;
+  const pts = [];
+  for(let r=0;r<=ROWS;r++) for(let c=0;c<=COLS;c++)
+    pts.push({bx:c/COLS, by:r/ROWS,
+      freqX: 1.2+Math.random()*.8, freqY:.9+Math.random()*.7,
+      phaseX: Math.random()*Math.PI*2, phaseY: Math.random()*Math.PI*2,
+      amp: .012+Math.random()*.018});
+
+  /* ── FLOATING DUST motes ── */
+  const DUST = Array.from({length:55},()=>({
+    x: Math.random(), y: Math.random(),
+    r: .4+Math.random()*1.2,
+    vx:(Math.random()-.5)*.00015,
+    vy:-.00008-Math.random()*.00012,
+    alpha:.15+Math.random()*.35,
+    phase: Math.random()*Math.PI*2,
+  }));
+
+  /* ── FISH SPECIES ── */
+  const SPECIES = [
+    // tropical small school fish
+    { name:'school', bodyLen:18, bodyH:7,  colorTop:'rgba(80,180,240,{a})',  colorBelly:'rgba(200,240,255,{a})', colorFin:'rgba(60,150,210,{a})', stripes:[], count:14, depth:[.25,.65], speed:[.55,1.0], scale:[.8,1.2] },
+    // larger blue fish
+    { name:'blue',   bodyLen:38, bodyH:14, colorTop:'rgba(30,110,200,{a})',  colorBelly:'rgba(100,190,240,{a})', colorFin:'rgba(20,80,160,{a})',  stripes:['rgba(0,200,255,{a})'], count:4, depth:[.3,.7], speed:[.3,.6], scale:[.9,1.4] },
+    // orange/gold fish
+    { name:'gold',   bodyLen:28, bodyH:11, colorTop:'rgba(210,140,30,{a})',  colorBelly:'rgba(255,210,100,{a})', colorFin:'rgba(190,110,20,{a})', stripes:['rgba(255,180,0,{a})'], count:5, depth:[.2,.6], speed:[.4,.75], scale:[.8,1.1] },
+    // deep silver fish
+    { name:'silver', bodyLen:45, bodyH:16, colorTop:'rgba(80,130,180,{a})',  colorBelly:'rgba(190,220,240,{a})', colorFin:'rgba(60,100,150,{a})', stripes:[], count:3, depth:[.5,.85], speed:[.2,.45], scale:[1.0,1.6] },
+    // tiny dart fish
+    { name:'dart',   bodyLen:12, bodyH:4,  colorTop:'rgba(0,200,180,{a})',   colorBelly:'rgba(160,240,230,{a})', colorFin:'rgba(0,160,140,{a})', stripes:[], count:18, depth:[.15,.5], speed:[.8,1.4], scale:[.7,1.0] },
+  ];
+
+  /* ── BUILD FISH POPULATION ── */
+  const FISH = [];
+  SPECIES.forEach(sp => {
+    for(let i=0;i<sp.count;i++){
+      const scale = sp.scale[0] + Math.random()*(sp.scale[1]-sp.scale[0]);
+      const dir   = Math.random() > 0.5 ? 1 : -1; // 1=left-to-right, -1=right-to-left
+      const depth = sp.depth[0] + Math.random()*(sp.depth[1]-sp.depth[0]);
+      const spd   = (sp.speed[0] + Math.random()*(sp.speed[1]-sp.speed[0])) * dir;
+      FISH.push({
+        sp,
+        x:   dir > 0 ? -0.15 - Math.random()*0.5 : 1.15 + Math.random()*0.5,
+        y:   depth,
+        spd,
+        dir,
+        scale,
+        // undulation: each fish has unique phase & frequency for body wave
+        phase:  Math.random()*Math.PI*2,
+        tailFreq: 2.2 + Math.random()*1.4,
+        tailAmp:  0.22 + Math.random()*0.14,
+        // vertical bobbing
+        bobAmp:  0.004 + Math.random()*0.006,
+        bobFreq: 0.4  + Math.random()*0.5,
+        bobPhase: Math.random()*Math.PI*2,
+        // shadow alpha factor based on depth
+        depthAlpha: 0.55 + depth*0.35,
+      });
+    }
+  });
+
+  /* ── DRAW SINGLE FISH ── */
+  function drawFish(f, cx, t){
+    const sp    = f.sp;
+    const bLen  = sp.bodyLen * f.scale;
+    const bH    = sp.bodyH  * f.scale;
+    const fx    = f.x * W;
+    const fy    = f.y * H + Math.sin(t * f.bobFreq + f.bobPhase) * f.bobAmp * H;
+    const tail  = Math.sin(t * f.tailFreq + f.phase) * f.tailAmp;
+    const flip  = f.dir < 0 ? -1 : 1;
+    // depth fog: fish further down are dimmer/bluer
+    const depthFade = Math.max(0.12, 1 - f.y * 0.65);
+    const a = f.depthAlpha * depthFade;
+
+    cx.save();
+    cx.translate(fx, fy);
+    cx.scale(flip, 1);
+
+    /* ── SHADOW / DEPTH BLUR ── */
+    cx.save();
+    cx.globalAlpha = a * 0.12;
+    cx.fillStyle = 'rgba(0,20,60,1)';
+    cx.beginPath();
+    cx.ellipse(2, bH*0.9, bLen*0.55, bH*0.2, 0, 0, Math.PI*2);
+    cx.fill();
+    cx.restore();
+
+    /* ── TAIL (drawn first, behind body) ── */
+    const tailX = -bLen * 0.5;
+    const tailSpread = bH * (0.85 + Math.abs(tail)*0.4);
+    const tailCtrlX  = tailX - bLen * 0.32;
+    const tailWag    = tail * bLen * 0.28;
+    cx.save();
+    cx.globalAlpha = a;
+    const finColor = sp.colorFin.replace('{a}', (a*0.85).toFixed(2));
+    // upper lobe
+    cx.beginPath();
+    cx.moveTo(tailX, 0);
+    cx.quadraticCurveTo(tailCtrlX, -tailSpread*0.5 + tailWag, tailCtrlX - bLen*0.18, -tailSpread + tailWag*1.3);
+    cx.quadraticCurveTo(tailCtrlX + bLen*0.04, tailWag*0.5, tailX, 0);
+    cx.fillStyle = finColor;
+    cx.fill();
+    // lower lobe
+    cx.beginPath();
+    cx.moveTo(tailX, 0);
+    cx.quadraticCurveTo(tailCtrlX, tailSpread*0.5 + tailWag, tailCtrlX - bLen*0.18, tailSpread + tailWag*1.3);
+    cx.quadraticCurveTo(tailCtrlX + bLen*0.04, tailWag*0.5, tailX, 0);
+    cx.fillStyle = finColor;
+    cx.fill();
+    cx.restore();
+
+    /* ── BODY gradient ── */
+    const bodyGrad = cx.createLinearGradient(0, -bH, 0, bH);
+    bodyGrad.addColorStop(0,   sp.colorTop.replace('{a}',    (a*0.92).toFixed(2)));
+    bodyGrad.addColorStop(0.45,sp.colorTop.replace('{a}',    (a*0.75).toFixed(2)));
+    bodyGrad.addColorStop(1,   sp.colorBelly.replace('{a}',  (a*0.85).toFixed(2)));
+
+    cx.save();
+    cx.globalAlpha = a;
+    // slight body wave: shift tail end up/down
+    cx.beginPath();
+    // custom fish-body path using bezier
+    const noseX  =  bLen * 0.48;
+    const midTopY= -bH   * 0.72;
+    const tailY  = tail  * bH * 0.35;
+
+    cx.moveTo(noseX, 0);
+    // top edge
+    cx.bezierCurveTo(
+      bLen*0.35, -bH*0.95,
+      -bLen*0.05, midTopY,
+      -bLen*0.5,  tailY - bH*0.1
+    );
+    // tail join
+    cx.lineTo(-bLen*0.5, tailY + bH*0.1);
+    // bottom edge
+    cx.bezierCurveTo(
+      -bLen*0.05, bH*0.55,
+      bLen*0.35,  bH*0.75,
+      noseX, 0
+    );
+    cx.closePath();
+    cx.fillStyle = bodyGrad;
+    cx.fill();
+
+    /* ── LATERAL LINE (realism detail) ── */
+    cx.beginPath();
+    cx.moveTo(noseX*0.5, -bH*0.08);
+    cx.bezierCurveTo(0, -bH*0.12, -bLen*0.3, -bH*0.06 + tailY*0.4, -bLen*0.48, tailY);
+    cx.strokeStyle = sp.colorTop.replace('{a}', (a*0.35).toFixed(2));
+    cx.lineWidth = bH*0.06;
+    cx.stroke();
+
+    /* ── STRIPES (species specific) ── */
+    if(sp.stripes.length > 0){
+      for(let si=0;si<2;si++){
+        const sx = bLen*(0.05 - si*0.2);
+        cx.save();
+        cx.clip();
+        cx.beginPath();
+        cx.ellipse(sx, 0, bLen*0.05, bH*0.72, 0, 0, Math.PI*2);
+        cx.fillStyle = sp.stripes[0].replace('{a}', (a*0.28).toFixed(2));
+        cx.fill();
+        cx.restore();
+        // re-clip body for stripes
+        cx.save();
+        cx.beginPath();
+        cx.moveTo(noseX,0);
+        cx.bezierCurveTo(bLen*0.35,-bH*0.95,-bLen*0.05,midTopY,-bLen*0.5,tailY-bH*0.1);
+        cx.lineTo(-bLen*0.5,tailY+bH*0.1);
+        cx.bezierCurveTo(-bLen*0.05,bH*0.55,bLen*0.35,bH*0.75,noseX,0);
+        cx.closePath();
+        cx.clip();
+        cx.beginPath();
+        cx.ellipse(sx, 0, bLen*0.05, bH*0.72, 0, 0, Math.PI*2);
+        cx.fillStyle = sp.stripes[0].replace('{a}', (a*0.28).toFixed(2));
+        cx.fill();
+        cx.restore();
+      }
+    }
+
+    /* ── DORSAL FIN ── */
+    const dorsalWave = Math.sin(t * f.tailFreq * 0.7 + f.phase) * bH * 0.1;
+    cx.beginPath();
+    cx.moveTo(bLen*0.1, -bH*0.7);
+    cx.bezierCurveTo(bLen*0.05, -bH*1.35 + dorsalWave, -bLen*0.15, -bH*1.2 + dorsalWave, -bLen*0.28, -bH*0.72);
+    cx.bezierCurveTo(-bLen*0.1, -bH*0.75, bLen*0.05, -bH*0.72, bLen*0.1, -bH*0.7);
+    cx.fillStyle = sp.colorFin.replace('{a}', (a*0.65).toFixed(2));
+    cx.fill();
+
+    /* ── PECTORAL FIN ── */
+    const pectWave = Math.sin(t * f.tailFreq * 0.9 + f.phase + 1) * bH * 0.15;
+    cx.beginPath();
+    cx.moveTo(bLen*0.18, bH*0.05);
+    cx.bezierCurveTo(bLen*0.05, bH*0.6 + pectWave, -bLen*0.08, bH*0.75 + pectWave, -bLen*0.02, bH*0.55);
+    cx.bezierCurveTo(bLen*0.08, bH*0.35, bLen*0.16, bH*0.18, bLen*0.18, bH*0.05);
+    cx.fillStyle = sp.colorFin.replace('{a}', (a*0.6).toFixed(2));
+    cx.fill();
+
+    /* ── ANAL FIN (small bottom fin) ── */
+    cx.beginPath();
+    cx.moveTo(-bLen*0.1, bH*0.7);
+    cx.bezierCurveTo(-bLen*0.18, bH*1.15 + tailY*0.3, -bLen*0.32, bH*1.05 + tailY*0.3, -bLen*0.38, bH*0.72);
+    cx.bezierCurveTo(-bLen*0.25, bH*0.72, -bLen*0.12, bH*0.72, -bLen*0.1, bH*0.7);
+    cx.fillStyle = sp.colorFin.replace('{a}', (a*0.5).toFixed(2));
+    cx.fill();
+
+    /* ── SCALES shimmer ── */
+    cx.save();
+    cx.beginPath();
+    cx.moveTo(noseX,0);
+    cx.bezierCurveTo(bLen*0.35,-bH*0.95,-bLen*0.05,midTopY,-bLen*0.5,tailY-bH*0.1);
+    cx.lineTo(-bLen*0.5,tailY+bH*0.1);
+    cx.bezierCurveTo(-bLen*0.05,bH*0.55,bLen*0.35,bH*0.75,noseX,0);
+    cx.closePath();
+    cx.clip();
+    // subtle iridescent sheen moving with t
+    const sheenX = bLen*(0.3 + Math.sin(t*0.8+f.phase)*0.25);
+    const sheen  = cx.createRadialGradient(sheenX,-bH*0.1,0, sheenX,-bH*0.1,bLen*0.45);
+    sheen.addColorStop(0,  `rgba(255,255,255,${(a*0.18).toFixed(2)})`);
+    sheen.addColorStop(0.5,`rgba(180,230,255,${(a*0.06).toFixed(2)})`);
+    sheen.addColorStop(1,  'rgba(0,0,0,0)');
+    cx.fillStyle = sheen;
+    cx.fillRect(-bLen*0.55,-bH*1.1,bLen*1.1,bH*2.2);
+    cx.restore();
+
+    cx.restore(); // body globalAlpha
+
+    /* ── EYE ── */
+    cx.save();
+    cx.globalAlpha = a;
+    const eyeX = bLen*0.3;
+    const eyeY = -bH*0.18;
+    const eyeR = bH*0.22;
+    // eye white / iris
+    cx.beginPath();
+    cx.arc(eyeX, eyeY, eyeR, 0, Math.PI*2);
+    cx.fillStyle = 'rgba(220,240,255,0.92)';
+    cx.fill();
+    // iris gradient
+    const irisG = cx.createRadialGradient(eyeX-eyeR*0.15,eyeY-eyeR*0.15,0, eyeX,eyeY,eyeR);
+    irisG.addColorStop(0,'rgba(40,80,160,0.9)');
+    irisG.addColorStop(0.6,'rgba(10,30,80,0.95)');
+    irisG.addColorStop(1,'rgba(0,0,0,1)');
+    cx.beginPath();
+    cx.arc(eyeX, eyeY, eyeR*0.72, 0, Math.PI*2);
+    cx.fillStyle = irisG;
+    cx.fill();
+    // pupil
+    cx.beginPath();
+    cx.arc(eyeX, eyeY, eyeR*0.32, 0, Math.PI*2);
+    cx.fillStyle = 'rgba(0,0,0,0.95)';
+    cx.fill();
+    // highlight
+    cx.beginPath();
+    cx.arc(eyeX + eyeR*0.22, eyeY - eyeR*0.22, eyeR*0.18, 0, Math.PI*2);
+    cx.fillStyle = 'rgba(255,255,255,0.9)';
+    cx.fill();
+    cx.restore();
+
+    cx.restore(); // translate/scale
+  }
+
+  function draw(){
+    t += .008;
+    cx.clearRect(0,0,W,H);
+
+    /* 1. Subtle ambient light overlay only — body gradient is the base colour */
+    const gy0 = cx.createRadialGradient(W*.5, 0, 0, W*.5, H*.35, W*.7);
+    gy0.addColorStop(0, 'rgba(0,100,180,.10)');
+    gy0.addColorStop(1, 'transparent');
+    cx.fillStyle = gy0; cx.fillRect(0,0,W,H);
+
+    /* 3. Volumetric god rays */
+    cx.save();
+    RAYS.forEach(ray=>{
+      const pulse = Math.sin(t * ray.speed * 1000 + ray.x*6) * .5 + .5;
+      const alpha = ray.base + pulse * .09;
+      const rx = W * ray.x;
+      const angleRad = ray.angle * Math.PI/180;
+      const rayLen = H * 1.3;
+      const dx = Math.sin(angleRad) * rayLen;
+
+      // Fan shape: trapezoid from top
+      const hw = ray.w * (.5 + pulse*.2);
+      cx.beginPath();
+      cx.moveTo(rx - hw*.12, 0);
+      cx.lineTo(rx + hw*.12, 0);
+      cx.lineTo(rx + dx + hw, rayLen);
+      cx.lineTo(rx + dx - hw, rayLen);
+      cx.closePath();
+
+      const rg = cx.createLinearGradient(rx, 0, rx + dx, rayLen);
+      rg.addColorStop(0,   `rgba(160,230,255,${alpha})`);
+      rg.addColorStop(.35, `rgba(100,190,240,${alpha*.7})`);
+      rg.addColorStop(.7,  `rgba(60,150,210,${alpha*.3})`);
+      rg.addColorStop(1,   'rgba(20,100,180,0)');
+      cx.fillStyle = rg;
+      cx.fill();
+    });
+    cx.restore();
+
+    /* 4. Caustic light mesh */
+    cx.save();
+    cx.globalCompositeOperation = 'screen';
+    for(let row=0;row<ROWS;row++){
+      for(let col=0;col<COLS;col++){
+        const i = row*(COLS+1)+col;
+        const p = pts[i], pr = pts[i+1], pb = pts[i+COLS+1], pbr = pts[i+COLS+2];
+        if(!p||!pr||!pb||!pbr) continue;
+
+        const ax = (p.bx  + Math.sin(t*p.freqX  +p.phaseX)*p.amp)*W;
+        const ay = (p.by  + Math.cos(t*p.freqY  +p.phaseY)*p.amp)*H;
+        const bx = (pr.bx + Math.sin(t*pr.freqX +pr.phaseX)*pr.amp)*W;
+        const by = (pr.by + Math.cos(t*pr.freqY +pr.phaseY)*pr.amp)*H;
+        const cx2= (pb.bx + Math.sin(t*pb.freqX +pb.phaseX)*pb.amp)*W;
+        const cy2= (pb.by + Math.cos(t*pb.freqY +pb.phaseY)*pb.amp)*H;
+        const dx2= (pbr.bx+ Math.sin(t*pbr.freqX+pbr.phaseX)*pbr.amp)*W;
+        const dy2= (pbr.by + Math.cos(t*pbr.freqY+pbr.phaseY)*pbr.amp)*H;
+
+        // brightness from area compression (smaller area = brighter caustic)
+        const area = Math.abs((bx-ax)*(cy2-ay)-(cx2-ax)*(by-ay));
+        const norm = (W/COLS)*(H/ROWS);
+        const bright = Math.max(0, 1 - area/norm);
+
+        if(bright > .05){
+          const midX=(ax+bx+cx2+dx2)/4, midY=(ay+by+cy2+dy2)/4;
+          const depth = midY/H;
+          const alpha = bright*.18*(1-depth*.6);
+          const cg2 = cx.createRadialGradient(midX,midY,0,midX,midY,(W/COLS)*1.2);
+          cg2.addColorStop(0, `rgba(180,240,255,${alpha})`);
+          cg2.addColorStop(1, 'rgba(80,180,240,0)');
+          cx.beginPath();
+          cx.moveTo(ax,ay); cx.lineTo(bx,by); cx.lineTo(dx2,dy2); cx.lineTo(cx2,cy2);
+          cx.closePath();
+          cx.fillStyle = cg2;
+          cx.fill();
+        }
+      }
+    }
+    cx.globalCompositeOperation = 'source-over';
+    cx.restore();
+
+    /* 5. Floating underwater dust */
+    cx.save();
+    DUST.forEach(d=>{
+      d.x += d.vx + Math.sin(t*.7+d.phase)*.0003;
+      d.y += d.vy;
+      if(d.y < -.01){ d.y=1.01; d.x=Math.random(); }
+      const alpha = d.alpha * (.5+.5*Math.sin(t*.5+d.phase));
+      cx.beginPath();
+      cx.arc(d.x*W, d.y*H, d.r, 0, Math.PI*2);
+      cx.fillStyle=`rgba(160,220,255,${alpha})`;
+      cx.fill();
+    });
+    cx.restore();
+
+    /* 6. Water surface shimmer at very top */
+    cx.save();
+    for(let i=0;i<22;i++){
+      const sx = (i/22)*W + Math.sin(t*1.2+i*.8)*20;
+      const sy = 8 + Math.sin(t*2+i*.55)*5 + Math.cos(t*.8+i)*3;
+      const sw = 18+Math.sin(t+i*1.1)*12;
+      const sg = cx.createLinearGradient(sx-sw,sy,sx+sw,sy);
+      sg.addColorStop(0,'transparent');
+      sg.addColorStop(.5,`rgba(200,240,255,${.06+Math.sin(t*1.5+i)*.04})`);
+      sg.addColorStop(1,'transparent');
+      cx.fillStyle=sg;
+      cx.fillRect(sx-sw,sy-1,sw*2,2);
+    }
+    cx.restore();
+
+    /* 7. FISH ── realistic swimming fish */
+    FISH.forEach(f => {
+      // advance x position
+      f.x += f.spd * 0.00038;
+      // wrap around when fully off screen
+      if(f.dir > 0 && f.x > 1.18){ f.x = -0.15; f.y = f.sp.depth[0]+Math.random()*(f.sp.depth[1]-f.sp.depth[0]); }
+      if(f.dir < 0 && f.x < -0.18){ f.x = 1.15;  f.y = f.sp.depth[0]+Math.random()*(f.sp.depth[1]-f.sp.depth[0]); }
+      drawFish(f, cx, t);
+    });
+
+
+
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+/* BUBBLES */
+const bw=document.getElementById('bwrap');
+for(let i=0;i<32;i++){
+  const b=document.createElement('div'),s=3+Math.random()*16;
+  b.className='bubble';
+  b.style.cssText=`width:${s}px;height:${s}px;left:${Math.random()*100}%;--bd:${7+Math.random()*11}s;--bdd:${-Math.random()*14}s;--drift:${(Math.random()-.5)*40}px`;
+  bw.appendChild(b);
+}
+
+/* KELP */
+const kw=document.getElementById('kelpWrap');
+for(let i=0;i<20;i++){
+  const k=document.createElement('div');k.className='kelp';
+  k.style.cssText=`left:${3+i*4.8+Math.random()*3}%;height:${80+Math.random()*220}px;--kd:${4+Math.random()*5}s;--kdd:${-Math.random()*7}s;--kt:${-10+Math.random()*20}deg;opacity:${.25+Math.random()*.5}`;
+  kw.appendChild(k);
+}
+
+/* WATER MOTES */
+const mw=document.getElementById('motesWrap');
+for(let i=0;i<55;i++){
+  const m=document.createElement('div');m.className='mote';
+  m.style.cssText=`left:${Math.random()*100}%;top:${Math.random()*100}%;--md:${8+Math.random()*14}s;--mdd:${-Math.random()*15}s;--mx:${(Math.random()-.5)*80}px;--my:${-120-Math.random()*200}px;width:${1+Math.random()*2.5}px;height:${1+Math.random()*2.5}px`;
+  mw.appendChild(m);
+}
+
+/* BIO DOTS */
+const bioW=document.getElementById('bioWrap');
+['0,200,255','0,255,176','255,90,160'].forEach((c)=>{
+  for(let i=0;i<18;i++){
+    const bd=document.createElement('div'),s=2+Math.random()*8;
+    bd.className='bdot';
+    bd.style.cssText=`width:${s}px;height:${s}px;left:${Math.random()*100}%;top:${Math.random()*100}%;background:rgb(${c});box-shadow:0 0 ${s*3}px rgba(${c},.7);--bp:${2+Math.random()*5}s;--bpd:${-Math.random()*5}s`;
+    bioW.appendChild(bd);
+  }
+});
+
+/* TRENCH LINES */
+const tlw=document.getElementById('tlWrap');
+for(let i=0;i<14;i++){
+  const t=document.createElement('div');t.className='tl';
+  t.style.cssText=`top:${i*8}%;--tm:${6+Math.random()*10}s;--tmd:${-Math.random()*10}s`;
+  tlw.appendChild(t);
+}
+
+/* DEPTH TRACKING */
+const SECS=['ss','se','sm','sb2','sh'];
+const DEPS={ss:0,se:200,sm:1000,sb2:4000,sh:11000};
+const dots=document.querySelectorAll('.sbdot');
+const sbf=document.getElementById('sbfill');
+const ndepth=document.getElementById('ndepth');
+const pval=document.getElementById('pval');
+let cur=0,tgt=0;
+(function tick(){cur+=(tgt-cur)*.05;ndepth.textContent=Math.round(cur).toLocaleString();if(pval)pval.textContent=Math.max(1,Math.round(cur/10));requestAnimationFrame(tick)})();
+
+window.addEventListener('scroll',()=>{
+  const sy=window.scrollY,maxSY=document.documentElement.scrollHeight-window.innerHeight;
+  if(sbf) sbf.style.height=(sy/maxSY*100)+'%';
+  const mid=sy+window.innerHeight*.5;
+  SECS.forEach((id,i)=>{
+    const el=document.getElementById(id);if(!el)return;
+    const top=el.offsetTop,bot=top+el.offsetHeight;
+    if(mid>=top&&mid<bot){
+      const pct=(mid-top)/(bot-top),d1=DEPS[id],d2=DEPS[SECS[i+1]]||d1;
+      tgt=d1+(d2-d1)*pct;
+      dots.forEach((d,di)=>d.classList.toggle('on',di===i));
+    }
+  });
+
+},{passive:true});
+
+dots.forEach(d=>d.addEventListener('click',()=>document.getElementById(d.dataset.s)?.scrollIntoView({behavior:'smooth'})));
+
+/* DEPTH SLIDER */
+const sdata=[
+  {min:200,max:400,zone:'Upper Mesopelagic',fact:'At 200m sunlight is a faint blue ghost. Creatures evolve enormous eyes to capture every last photon in the perpetual twilight.',tags:['Lanternfish','Hatchetfish','Krill']},
+  {min:400,max:600,zone:'Mid Mesopelagic',fact:'Oxygen minimum zones form here. Siphonophores — sometimes 40m long — trail venomous tentacles through the dark water.',tags:['Siphonophore','Jellyfish','Bristlemouth']},
+  {min:600,max:800,zone:'Lower Mesopelagic',fact:'Millions of creatures make nightly vertical migrations: ascending at dusk to feed near the surface, retreating before dawn.',tags:['Myctophid','Copepod','Dragonfish']},
+  {min:800,max:1001,zone:'Deep Mesopelagic',fact:'The edge of eternal darkness. Below this line no photosynthesis has ever occurred. The ocean becomes another world entirely.',tags:['Oarfish','Fangtooth','Stoplight Loosejaw']},
+];
+const slider=document.getElementById('dslider'),enu=document.getElementById('enum'),ezo=document.getElementById('ezone'),epr=document.getElementById('epres'),efa=document.getElementById('efact'),eta=document.getElementById('etags');
+function updateSlider(v){
+  v=+v;enu.innerHTML=v.toLocaleString()+'<span>m</span>';
+  const d=sdata.find(x=>v>=x.min&&v<x.max)||sdata[sdata.length-1];
+  ezo.textContent=d.zone;epr.textContent=`≈ ${Math.round(v/10)} ATM`;
+  efa.style.opacity='0';setTimeout(()=>{efa.textContent=d.fact;efa.style.opacity='1'},220);
+  eta.innerHTML=d.tags.map(t=>`<span class="etag">${t}</span>`).join('');
+}
+slider?.addEventListener('input',e=>updateSlider(e.target.value));
+updateSlider(200);
+
+/* ══════════════════════════════════════════════════════
+   GSAP + SCROLLTRIGGER ANIMATIONS
+   Replaces IntersectionObserver for professional-grade
+   scroll-driven reveals, parallax and stagger effects
+══════════════════════════════════════════════════════ */
+(function initGSAP(){
+  if(typeof gsap === 'undefined' || typeof ScrollTrigger === 'undefined'){
+    // Fallback: use original class-based reveals if GSAP fails to load
+    const ro=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('show')}),{threshold:.12});
+    document.querySelectorAll('.rev').forEach(el=>ro.observe(el));
+    document.querySelectorAll('.card').forEach((c,i)=>setTimeout(()=>c.classList.add('vis'),i*110+200));
+    return;
+  }
+
+  gsap.registerPlugin(ScrollTrigger);
+
+  // ── Override .rev — set initial state via GSAP, not CSS transform
+  gsap.set('.rev', { opacity:0, y:40 });
+
+  // ── Batch reveal all .rev elements with ScrollTrigger
+  ScrollTrigger.batch('.rev', {
+    onEnter: batch => gsap.to(batch, {
+      opacity:1, y:0, duration:1.0, stagger:0.12,
+      ease:'power3.out', overwrite:true
+    }),
+    start: 'top 88%',
+    once: true,
+  });
+
+  // ── HERO PARALLAX — text floats up as you scroll away from surface
+  gsap.to('.hero', {
+    yPercent: -22,
+    ease: 'none',
+    scrollTrigger: {
+      trigger: '#ss',
+      start: 'top top',
+      end: 'bottom top',
+      scrub: 1.2,
+    }
+  });
+
+  // ── Hero title letters split into individual animated chars
+  gsap.from('.hh1', {
+    opacity:0, y:60, scale:0.96,
+    duration:1.4, ease:'expo.out',
+    delay:2.8,
+  });
+  gsap.from('.hpre', { opacity:0, y:20, duration:1, ease:'power2.out', delay:2.5 });
+  gsap.from('.hsub', { opacity:0, y:20, duration:1, ease:'power2.out', delay:3.0 });
+
+  // ── CARD STAGGER — animate in with GSAP when grid enters view
+  gsap.set('.card', { opacity:0, y:30, scale:0.96 });
+  ScrollTrigger.create({
+    trigger: '#cgrid',
+    start: 'top 80%',
+    once: true,
+    onEnter: () => {
+      gsap.to('.card', {
+        opacity:1, y:0, scale:1,
+        duration:0.7, stagger:0.10,
+        ease:'back.out(1.4)',
+      });
+      // Also trigger .vis for the border-top shimmer (CSS-driven)
+      document.querySelectorAll('.card').forEach((c,i)=>setTimeout(()=>c.classList.add('vis'),i*100));
+    }
+  });
+
+  // ── ZONE HEADERS — slide in from slight left offset
+  document.querySelectorAll('.zh2').forEach(el => {
+    gsap.from(el, {
+      opacity:0, x:-30,
+      duration:1.1, ease:'power3.out',
+      scrollTrigger:{ trigger:el, start:'top 82%', once:true }
+    });
+  });
+
+  // ── STATS COUNTER ANIMATION — numbers count up when visible
+  document.querySelectorAll('.stn').forEach(el => {
+    const txt = el.innerText;
+    const num = parseFloat(txt.replace(/[^0-9.]/g,''));
+    const suf = txt.replace(/[0-9.]/g,'').trim();
+    if(!isNaN(num) && num > 0){
+      ScrollTrigger.create({
+        trigger: el, start:'top 85%', once:true,
+        onEnter:()=>{
+          gsap.fromTo({val:0},{val:num},{
+            duration:2.2, ease:'power2.out',
+            onUpdate:function(){ el.innerHTML = Math.round(this.targets()[0].val) + '<em>' + suf + '</em>'; }
+          });
+        }
+      });
+    }
+  });
+
+  // ── EXPLORER WIDGET — slide up when mesopelagic enters
+  gsap.from('.explorer',{
+    opacity:0, y:50,
+    duration:1.2, ease:'power3.out',
+    scrollTrigger:{ trigger:'.explorer', start:'top 80%', once:true }
+  });
+
+  // ── HADAL FACTS TILES — stagger in with scale bounce
+  gsap.set('.htile',{ opacity:0, y:20, scale:0.9 });
+  ScrollTrigger.create({
+    trigger:'.hgrid', start:'top 82%', once:true,
+    onEnter:()=>{
+      gsap.to('.htile',{
+        opacity:1, y:0, scale:1,
+        duration:0.65, stagger:0.10,
+        ease:'back.out(1.5)'
+      });
+    }
+  });
+
+  // ── KELP PARALLAX — kelp strands move at different speeds
+  gsap.to('#kelpWrap',{
+    yPercent:-12,
+    ease:'none',
+    scrollTrigger:{
+      trigger:'#se', start:'top bottom', end:'bottom top',
+      scrub:2,
+    }
+  });
+
+  // ── BIO DOTS PARALLAX in mesopelagic
+  gsap.to('#bioWrap',{
+    yPercent:-8,
+    ease:'none',
+    scrollTrigger:{
+      trigger:'#sm', start:'top bottom', end:'bottom top',
+      scrub:1.5,
+    }
+  });
+
+  // ── PRESSURE RING — rotates faster as you scroll into meso
+  gsap.to('.psvg',{
+    rotation:360,
+    ease:'none',
+    repeat:-1,
+    duration:30,
+  });
+
+  // ── SECTION FADE BETWEEN ZONES — subtle opacity shift on scroll
+  ['#se','#sm','#sb2','#sh'].forEach(id=>{
+    gsap.fromTo(id,
+      { opacity:0.6 },
+      { opacity:1, duration:0.5, ease:'power2.inOut',
+        scrollTrigger:{ trigger:id, start:'top 60%', end:'top 30%', scrub:true } }
+    );
+  });
+
+  // ── CTA button — pulse entrance
+  gsap.from('.cta',{
+    opacity:0, scale:0.9,
+    duration:1, ease:'elastic.out(1,0.5)',
+    scrollTrigger:{ trigger:'.cta', start:'top 88%', once:true }
+  });
+
+  console.log('[RAVINE] GSAP ScrollTrigger initialised ✓');
+})();
+
+/* ══════════════════════════════════════════════════════
+   BATHYS SOUND ENGINE v4  —  Melodious & Calm
+   Inspired by ambient piano, Ghibli ocean scores,
+   wind chimes over still water. All Web Audio API.
+══════════════════════════════════════════════════════ */
+(function(){
+  const btn   = document.getElementById('soundBtn');
+  const label = document.getElementById('soundZoneLabel');
+  if(!btn) return;
+
+  let actx = null, playing = false, currentZone = -1;
+  let nodes = {}, seqTimer = null;
+
+  const SECS = ['ss','se','sm','sb2','sh'];
+
+  /* ─── ZONE MUSIC DEFINITIONS ─────────────────────────
+     All scales are major / major pentatonic / lydian.
+     Nothing minor, nothing dissonant.
+     The mood shifts from sparkling → warm → soft → still.
+  ──────────────────────────────────────────────────── */
+  const ZONES = [
+    {
+      name: 'Surface',
+      // C major pentatonic — bright, shimmering, like wind chimes over water
+      melody: [523.25, 587.33, 659.25, 783.99, 880.00, 1046.50, 1174.66, 659.25, 783.99, 523.25],
+      tempo: 1.6,   noteVol: 0.10, decay: 1.8, attack: 0.06,
+      padFreqs: [130.81, 196.00, 261.63, 392.00], // C2 chord — open and airy
+      padVol: 0.048, padDetune: 0.4,
+      noiseVol: 0.012, noiseLPF: 800,
+      reverbWet: 0.42, reverbTail: 3.0,
+      masterVol: 0.40, masterLPF: 5000,
+    },
+    {
+      name: 'Sunlit Zone',
+      // G major pentatonic — warm golden, like rays through shallow water
+      melody: [392.00, 440.00, 493.88, 587.33, 659.25, 783.99, 880.00, 587.33, 493.88, 392.00],
+      tempo: 2.2,   noteVol: 0.09, decay: 2.4, attack: 0.08,
+      padFreqs: [98.00, 146.83, 196.00, 293.66], // G2 chord — warm
+      padVol: 0.052, padDetune: 0.3,
+      noiseVol: 0.009, noiseLPF: 600,
+      reverbWet: 0.52, reverbTail: 4.5,
+      masterVol: 0.40, masterLPF: 3500,
+    },
+    {
+      name: 'Twilight Zone',
+      // F major pentatonic — soft, gentle, peaceful twilight
+      melody: [349.23, 392.00, 523.25, 587.33, 698.46, 523.25, 392.00, 349.23, 440.00, 523.25],
+      tempo: 3.0,   noteVol: 0.08, decay: 3.2, attack: 0.12,
+      padFreqs: [87.31, 130.81, 174.61, 261.63], // F2 — calm, rounded
+      padVol: 0.058, padDetune: 0.25,
+      noiseVol: 0.006, noiseLPF: 400,
+      reverbWet: 0.64, reverbTail: 6.0,
+      masterVol: 0.40, masterLPF: 2200,
+    },
+    {
+      name: 'Midnight Zone',
+      // Bb major pentatonic, low octave — slow, meditative, like a singing bowl
+      melody: [233.08, 261.63, 293.66, 349.23, 392.00, 349.23, 293.66, 261.63, 233.08, 293.66],
+      tempo: 4.8,   noteVol: 0.07, decay: 5.0, attack: 0.18,
+      padFreqs: [58.27, 87.31, 116.54, 174.61], // Bb1 — deep and warm
+      padVol: 0.064, padDetune: 0.18,
+      noiseVol: 0.003, noiseLPF: 250,
+      reverbWet: 0.78, reverbTail: 9.0,
+      masterVol: 0.40, masterLPF: 1400,
+    },
+    {
+      name: 'Hadal Zone',
+      // Eb major, ultra-low — very rare notes, like a distant bell in silence
+      melody: [155.56, 185.00, 233.08, 185.00, 155.56, 207.65, 233.08, 155.56],
+      tempo: 8.0,   noteVol: 0.06, decay: 8.0, attack: 0.25,
+      padFreqs: [38.89, 58.27, 77.78, 116.54], // Eb1 — vast and still
+      padVol: 0.068, padDetune: 0.10,
+      noiseVol: 0.001, noiseLPF: 150,
+      reverbWet: 0.90, reverbTail: 14.0,
+      masterVol: 0.40, masterLPF: 900,
+    },
+  ];
+
+  /* ─── Reverb IR ─── */
+  function makeIR(ctx, tail, decay){
+    const len = Math.floor(ctx.sampleRate * tail);
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for(let c=0;c<2;c++){
+      const d = buf.getChannelData(c);
+      for(let i=0;i<len;i++)
+        d[i] = (Math.random()*2-1) * Math.pow(1-i/len, decay);
+    }
+    return buf;
+  }
+
+  /* ─── Play a single soft melodic note ─── */
+  function playNote(freq, vol, decay, attack, dest, ctx){
+    // Main tone: pure sine — the most natural, calming wave shape
+    const osc = ctx.createOscillator();
+    osc.type  = 'sine';
+    osc.frequency.value = freq;
+
+    // Gentle 3rd harmonic at 1/6 volume adds warmth without harshness
+    const osc2 = ctx.createOscillator();
+    osc2.type  = 'triangle';
+    osc2.frequency.value = freq * 3;
+
+    const env  = ctx.createGain();
+    const env2 = ctx.createGain();
+    const now  = ctx.currentTime;
+
+    // Envelope: silky attack → hold → long exponential release
+    env.gain.setValueAtTime(0.0001, now);
+    env.gain.linearRampToValueAtTime(vol,        now + attack);
+    env.gain.linearRampToValueAtTime(vol * 0.65, now + attack + 0.4);
+    env.gain.exponentialRampToValueAtTime(0.0001, now + decay);
+
+    env2.gain.setValueAtTime(0.0001, now);
+    env2.gain.linearRampToValueAtTime(vol * 0.12, now + attack * 0.5);
+    env2.gain.exponentialRampToValueAtTime(0.0001, now + decay * 0.25);
+
+    osc.connect(env);   env.connect(dest);
+    osc2.connect(env2); env2.connect(dest);
+
+    osc.start(now);  osc.stop(now + decay + 0.2);
+    osc2.start(now); osc2.stop(now + decay * 0.3);
+  }
+
+  /* ─── Build audio graph ─── */
+  function buildGraph(ctx, z){
+    // Master → LPF → output
+    const master  = ctx.createGain(); master.gain.value = 0;
+    const masterF = ctx.createBiquadFilter();
+    masterF.type  = 'lowpass'; masterF.frequency.value = z.masterLPF; masterF.Q.value = 0.5;
+    master.connect(masterF); masterF.connect(ctx.destination);
+
+    // Lush reverb
+    const conv  = ctx.createConvolver(); conv.buffer = makeIR(ctx, z.reverbTail, 2.2);
+    const convG = ctx.createGain(); convG.gain.value = z.reverbWet;
+    const dry   = ctx.createGain(); dry.gain.value   = 1 - z.reverbWet;
+    conv.connect(convG); dry.connect(master); convG.connect(master);
+
+    // Melody goes into both reverb and dry
+    const melBus = ctx.createGain(); melBus.gain.value = 1;
+    melBus.connect(conv); melBus.connect(dry);
+
+    // Warm pad — 4 detuned sines forming a gentle chord
+    const pads = z.padFreqs.map((f, i) => {
+      const osc  = ctx.createOscillator();
+      osc.type   = 'sine';
+      osc.frequency.value = f + (Math.random()-0.5)*z.padDetune;
+      // Each pad has its own ultra-slow vibrato for organic shimmer
+      const vibOsc = ctx.createOscillator(); vibOsc.type='sine';
+      vibOsc.frequency.value = 0.04 + i*0.013;
+      const vibG   = ctx.createGain(); vibG.gain.value = f * 0.0018;
+      vibOsc.connect(vibG); vibG.connect(osc.frequency); vibOsc.start();
+      const g = ctx.createGain();
+      // Scale volume: root strongest, upper harmonics quieter
+      g.gain.value = z.padVol * [1, 0.62, 0.38, 0.22][i];
+      osc.connect(g); g.connect(conv); g.connect(dry);
+      osc.start();
+      return { osc, g, vibOsc };
+    });
+
+    // Breath noise — so quiet it's subliminal
+    const nLen  = ctx.sampleRate * 8;
+    const nBuf  = ctx.createBuffer(1, nLen, ctx.sampleRate);
+    const nData = nBuf.getChannelData(0);
+    // Pink-ish noise: average 3 samples for softer texture
+    for(let i=0;i<nLen;i++) nData[i]=(Math.random()+Math.random()+Math.random())/3*2-1;
+    const nSrc  = ctx.createBufferSource(); nSrc.buffer=nBuf; nSrc.loop=true; nSrc.playbackRate.value=0.35; nSrc.start();
+    const nLPF  = ctx.createBiquadFilter(); nLPF.type='lowpass'; nLPF.frequency.value=z.noiseLPF; nLPF.Q.value=0.25;
+    const nGain = ctx.createGain(); nGain.gain.value = z.noiseVol;
+    // Breath cycle — 12s inhale/exhale
+    const bLFO  = ctx.createOscillator(); bLFO.type='sine'; bLFO.frequency.value=0.083;
+    const bLFOG = ctx.createGain(); bLFOG.gain.value = z.noiseVol * 0.6;
+    bLFO.connect(bLFOG); bLFOG.connect(nGain.gain); bLFO.start();
+    nSrc.connect(nLPF); nLPF.connect(nGain); nGain.connect(conv);
+
+    return { master, masterF, conv, convG, dry, melBus, pads, nGain, nLPF, bLFO };
+  }
+
+  /* ─── Sequencer — plays notes from melody array in order with gentle variation ─── */
+  let noteIdx = 0;
+  function scheduleNote(z){
+    if(!playing || !actx) return;
+
+    const freq = z.melody[noteIdx % z.melody.length];
+    noteIdx++;
+
+    playNote(freq, z.noteVol, z.decay, z.attack, nodes.melBus, actx);
+
+    // Occasionally add a soft 2nd note a 5th above for gentle harmony (25% chance)
+    if(Math.random() < 0.25){
+      const harmony = freq * 1.5;
+      setTimeout(()=>{
+        if(playing && actx)
+          playNote(harmony, z.noteVol * 0.35, z.decay * 0.6, z.attack * 1.4, nodes.melBus, actx);
+      }, z.tempo * 280);
+    }
+
+    // Rhythmic breathing: slight variation ±20% so it never feels robotic
+    const jitter = 1 + (Math.random()-0.5) * 0.4;
+    seqTimer = setTimeout(()=>scheduleNote(z), z.tempo * jitter * 1000);
+  }
+
+  /* ─── Morph ambient layers when zone changes ─── */
+  function morphToZone(z){
+    const T=actx.currentTime, R=5.0;
+    nodes.master.gain.setTargetAtTime(z.masterVol, T, R*0.4);
+    nodes.masterF.frequency.setTargetAtTime(z.masterLPF, T, R);
+    nodes.convG.gain.setTargetAtTime(z.reverbWet, T, R);
+    nodes.dry.gain.setTargetAtTime(1-z.reverbWet, T, R);
+    nodes.nGain.gain.setTargetAtTime(z.noiseVol, T, R);
+    nodes.nLPF.frequency.setTargetAtTime(z.noiseLPF, T, R);
+    nodes.pads.forEach((p,i)=>{
+      p.g.gain.setTargetAtTime(z.padVol*[1,.62,.38,.22][i], T, R*1.2);
+      p.osc.frequency.setTargetAtTime(z.padFreqs[i], T, R*1.5);
+    });
+    // Reset melody to start of new zone
+    noteIdx = 0;
+    clearTimeout(seqTimer);
+    scheduleNote(z);
+  }
+
+  /* ─── Zone label ─── */
+  let lblTimer;
+  function flashLabel(name){
+    label.textContent=name; label.classList.add('show');
+    clearTimeout(lblTimer);
+    lblTimer=setTimeout(()=>label.classList.remove('show'),2400);
+  }
+
+  /* ─── Start / Stop ─── */
+  function startAudio(){
+    actx = new (window.AudioContext||window.webkitAudioContext)();
+    const z0 = ZONES[0];
+    nodes = buildGraph(actx, z0);
+    nodes.master.gain.setTargetAtTime(z0.masterVol, actx.currentTime, 1.6);
+    currentZone = 0; noteIdx = 0;
+    flashLabel(z0.name);
+    setTimeout(()=>scheduleNote(z0), 900);
+  }
+
+  function stopAudio(){
+    if(!actx) return;
+    clearTimeout(seqTimer);
+    nodes.master.gain.setTargetAtTime(0, actx.currentTime, 1.2);
+    setTimeout(()=>{ try{actx.close();}catch(e){} actx=null; nodes={}; currentZone=-1; }, 1800);
+  }
+
+  btn.addEventListener('click',()=>{
+    playing=!playing;
+    btn.classList.toggle('playing',playing);
+    if(playing) startAudio(); else stopAudio();
+  });
+
+  /* ─── Scroll zone detection ─── */
+  window.addEventListener('scroll',()=>{
+    if(!playing||!actx) return;
+    const mid=window.scrollY+window.innerHeight*0.5;
+    let zone=0;
+    SECS.forEach((id,i)=>{
+      const el=document.getElementById(id);
+      if(el&&mid>=el.offsetTop) zone=i;
+    });
+    if(zone!==currentZone){
+      currentZone=zone;
+      morphToZone(ZONES[zone]);
+      flashLabel(ZONES[zone].name);
+    }
+  },{passive:true});
+})();
+
+/* ══════════════════════════════════════════════════════
+   EPIPELAGIC CREATURE CANVAS
+   6 hand-drawn creatures swim bottom-right → top-left
+   and blend seamlessly into the surface fish animation
+══════════════════════════════════════════════════════ */
+(function(){
+  const cv = document.getElementById('epiCanvas');
+  if(!cv) return;
+  const cx = cv.getContext('2d');
+  let W, H, t = 0;
+
+  function resize(){
+    W = cv.width  = cv.offsetWidth;
+    H = cv.height = cv.offsetHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Direction: right → left (pure horizontal)
+  const DX = -0.00042;   // per frame in %W
+  const DY = 0.0;
+
+  /* ── CREATURE DEFINITIONS ── */
+  /* Each has a draw(cx, x, y, scale, alpha, t, phase) function */
+
+  // ── 1. CLOWNFISH ──
+  function drawClownfish(cx, x, y, sc, al, t, ph){
+    cx.save(); cx.translate(x,y); cx.scale(-sc,sc); // faces left (travel dir)
+    cx.globalAlpha = al;
+
+    // Body — orange ellipse
+    const bg = cx.createLinearGradient(-22,0,22,0);
+    bg.addColorStop(0,'rgba(255,110,30,1)'); bg.addColorStop(1,'rgba(220,60,10,1)');
+    cx.beginPath(); cx.ellipse(0,0,22,13,0,0,Math.PI*2); cx.fillStyle=bg; cx.fill();
+
+    // White stripes (3)
+    cx.fillStyle='rgba(255,255,255,0.92)';
+    cx.beginPath(); cx.ellipse(-12,0,4,12,0,0,Math.PI*2); cx.fill();
+    cx.beginPath(); cx.ellipse(0,0,3.5,12,0,0,Math.PI*2);  cx.fill();
+    cx.beginPath(); cx.ellipse(14,0,3,10,0,0,Math.PI*2);   cx.fill();
+
+    // Black outline on stripes
+    cx.strokeStyle='rgba(0,0,0,0.35)'; cx.lineWidth=1.2;
+    cx.beginPath(); cx.ellipse(-12,0,4,12,0,0,Math.PI*2); cx.stroke();
+    cx.beginPath(); cx.ellipse(0,0,3.5,12,0,0,Math.PI*2); cx.stroke();
+
+    // Tail wag
+    const tw = Math.sin(t*3.5+ph)*8;
+    cx.beginPath();
+    cx.moveTo(-22,0);
+    cx.quadraticCurveTo(-32,-10+tw,-40,-16+tw);
+    cx.quadraticCurveTo(-32,tw,-22,0);
+    cx.fillStyle='rgba(255,90,10,0.85)'; cx.fill();
+
+    // Dorsal fin
+    cx.beginPath(); cx.moveTo(8,-12); cx.quadraticCurveTo(2,-26,-8,-12);
+    cx.fillStyle='rgba(255,90,10,0.7)'; cx.fill();
+
+    // Eye
+    cx.beginPath(); cx.arc(16,-3,4,0,Math.PI*2); cx.fillStyle='#fff'; cx.fill();
+    cx.beginPath(); cx.arc(16,-3,2.2,0,Math.PI*2); cx.fillStyle='#111'; cx.fill();
+    cx.beginPath(); cx.arc(17,-4,0.8,0,Math.PI*2); cx.fillStyle='#fff'; cx.fill();
+
+    cx.restore();
+  }
+
+  // ── 2. SEA TURTLE ──
+  function drawTurtle(cx, x, y, sc, al, t, ph){
+    cx.save(); cx.translate(x,y); cx.scale(-sc,sc);
+    cx.globalAlpha = al;
+    const bob = Math.sin(t*0.7+ph)*3;
+    cx.translate(0, bob);
+
+    // Shell
+    const sg = cx.createRadialGradient(0,0,2,0,0,32);
+    sg.addColorStop(0,'rgba(100,160,60,1)'); sg.addColorStop(1,'rgba(50,100,30,1)');
+    cx.beginPath(); cx.ellipse(0,0,32,24,0,0,Math.PI*2); cx.fillStyle=sg; cx.fill();
+    cx.strokeStyle='rgba(30,80,10,0.5)'; cx.lineWidth=1;
+    // Shell pattern lines
+    for(let i=-2;i<=2;i++){cx.beginPath();cx.moveTo(i*10,-24);cx.lineTo(i*8,24);cx.stroke()}
+    cx.beginPath();cx.ellipse(0,0,32,24,0,0,Math.PI*2);cx.stroke();
+
+    // Head
+    cx.beginPath(); cx.ellipse(36,0,14,10,0,0,Math.PI*2);
+    cx.fillStyle='rgba(80,130,50,1)'; cx.fill();
+
+    // Flippers — wave animation
+    const fw = Math.sin(t*1.4+ph)*12;
+    cx.fillStyle='rgba(70,120,45,0.85)';
+    cx.beginPath(); cx.ellipse(-5,-28+fw,18,7,Math.PI*0.25,0,Math.PI*2); cx.fill();
+    cx.beginPath(); cx.ellipse(-5,28-fw,18,7,-Math.PI*0.25,0,Math.PI*2); cx.fill();
+    cx.beginPath(); cx.ellipse(-28,-10+fw,12,5,Math.PI*0.35,0,Math.PI*2); cx.fill();
+    cx.beginPath(); cx.ellipse(-28,10-fw,12,5,-Math.PI*0.35,0,Math.PI*2); cx.fill();
+
+    // Eye
+    cx.beginPath(); cx.arc(42,-3,3.5,0,Math.PI*2); cx.fillStyle='#fff'; cx.fill();
+    cx.beginPath(); cx.arc(42,-3,2,0,Math.PI*2); cx.fillStyle='#111'; cx.fill();
+    cx.beginPath(); cx.arc(43,-4,0.7,0,Math.PI*2); cx.fillStyle='#fff'; cx.fill();
+
+    cx.restore();
+  }
+
+  // ── 3. BLUE SHARK ──
+  function drawShark(cx, x, y, sc, al, t, ph){
+    cx.save(); cx.translate(x,y); cx.scale(-sc,sc);
+    cx.globalAlpha = al;
+
+    const tw = Math.sin(t*1.8+ph)*10;
+
+    // Body — sleek torpedo
+    const bg = cx.createLinearGradient(-55,0,55,0);
+    bg.addColorStop(0,'rgba(40,90,180,0.9)');
+    bg.addColorStop(0.4,'rgba(60,120,200,0.9)');
+    bg.addColorStop(1,'rgba(200,220,240,0.85)');
+    cx.beginPath();
+    cx.moveTo(55,0);
+    cx.bezierCurveTo(40,-14,-20,-14,-55,tw-5);
+    cx.lineTo(-55,tw+5);
+    cx.bezierCurveTo(-20,14,40,14,55,0);
+    cx.closePath();
+    cx.fillStyle=bg; cx.fill();
+
+    // Counter-shading belly
+    cx.beginPath();
+    cx.moveTo(50,0);
+    cx.bezierCurveTo(35,8,-15,8,-50,tw+3);
+    cx.lineTo(-50,tw+5);
+    cx.bezierCurveTo(-15,12,35,12,50,0);
+    cx.closePath();
+    cx.fillStyle='rgba(200,220,240,0.7)'; cx.fill();
+
+    // Caudal fin (tail)
+    cx.beginPath();
+    cx.moveTo(-50,tw);
+    cx.quadraticCurveTo(-70,-18+tw,-80,-28+tw);
+    cx.quadraticCurveTo(-65,tw,-50,tw);
+    cx.fillStyle='rgba(40,90,180,0.85)'; cx.fill();
+    cx.beginPath();
+    cx.moveTo(-50,tw);
+    cx.quadraticCurveTo(-70,24+tw,-80,34+tw);
+    cx.quadraticCurveTo(-65,tw,-50,tw);
+    cx.fillStyle='rgba(40,90,180,0.75)'; cx.fill();
+
+    // Dorsal fin
+    cx.beginPath();
+    cx.moveTo(10,-14);
+    cx.quadraticCurveTo(-5,-38,-20,-14);
+    cx.fillStyle='rgba(35,80,160,0.9)'; cx.fill();
+
+    // Pectoral fin
+    cx.beginPath();
+    cx.moveTo(20,8);
+    cx.quadraticCurveTo(10,36,-10,28);
+    cx.quadraticCurveTo(5,16,20,8);
+    cx.fillStyle='rgba(35,80,160,0.8)'; cx.fill();
+
+    // Eye
+    cx.beginPath(); cx.arc(44,-3,5,0,Math.PI*2); cx.fillStyle='rgba(0,0,0,0.8)'; cx.fill();
+    cx.beginPath(); cx.arc(45.5,-4.5,1.5,0,Math.PI*2); cx.fillStyle='rgba(255,255,255,0.6)'; cx.fill();
+
+    // Gill slits
+    cx.strokeStyle='rgba(30,70,150,0.4)'; cx.lineWidth=1.2;
+    for(let g=0;g<4;g++){
+      cx.beginPath(); cx.moveTo(28+g*6,-10); cx.quadraticCurveTo(30+g*6,0,28+g*6,10); cx.stroke();
+    }
+
+    cx.restore();
+  }
+
+  // ── 4. DOLPHIN ──
+  function drawDolphin(cx, x, y, sc, al, t, ph){
+    cx.save(); cx.translate(x,y); cx.scale(-sc,sc);
+    cx.globalAlpha = al;
+
+    const tw  = Math.sin(t*2.2+ph)*9;
+    const arc = Math.sin(t*0.9+ph)*5;
+    cx.translate(0,arc); // whole body arcs up/down gently
+
+    // Body
+    const bg = cx.createLinearGradient(-50,-16,0,16);
+    bg.addColorStop(0,'rgba(80,140,200,1)');
+    bg.addColorStop(0.5,'rgba(100,165,215,1)');
+    bg.addColorStop(1,'rgba(200,225,240,0.9)');
+    cx.beginPath();
+    cx.moveTo(52,0);
+    cx.bezierCurveTo(40,-15,-10,-15,-50,tw-4);
+    cx.lineTo(-50,tw+4);
+    cx.bezierCurveTo(-10,15,40,15,52,0);
+    cx.closePath();
+    cx.fillStyle=bg; cx.fill();
+
+    // Belly
+    cx.beginPath();
+    cx.moveTo(48,0);
+    cx.bezierCurveTo(35,9,-5,9,-45,tw+3);
+    cx.lineTo(-45,tw+4);
+    cx.bezierCurveTo(-5,13,35,13,48,0);
+    cx.fillStyle='rgba(210,230,245,0.8)'; cx.fill();
+
+    // Beak / rostrum
+    cx.beginPath();
+    cx.moveTo(52,0);
+    cx.quadraticCurveTo(72,-2,80,4);
+    cx.quadraticCurveTo(72,6,52,0);
+    cx.fillStyle='rgba(80,140,200,0.9)'; cx.fill();
+
+    // Dorsal fin
+    const dfw = Math.sin(t*1.5+ph)*3;
+    cx.beginPath();
+    cx.moveTo(8,-14);
+    cx.quadraticCurveTo(-2,-34+dfw,-16,-14);
+    cx.fillStyle='rgba(60,120,185,0.9)'; cx.fill();
+
+    // Flukes (tail)
+    cx.beginPath();
+    cx.moveTo(-48,tw);
+    cx.quadraticCurveTo(-62,-20+tw,-76,-30+tw);
+    cx.quadraticCurveTo(-60,tw,-48,tw);
+    cx.fillStyle='rgba(60,120,185,0.85)'; cx.fill();
+    cx.beginPath();
+    cx.moveTo(-48,tw);
+    cx.quadraticCurveTo(-62,20+tw,-76,30+tw);
+    cx.quadraticCurveTo(-60,tw,-48,tw);
+    cx.fillStyle='rgba(60,120,185,0.85)'; cx.fill();
+
+    // Pectoral fin
+    const pfw = Math.sin(t*1.8+ph+1)*8;
+    cx.beginPath();
+    cx.moveTo(22,10);
+    cx.quadraticCurveTo(14,30+pfw,0,26+pfw);
+    cx.quadraticCurveTo(12,18,22,10);
+    cx.fillStyle='rgba(60,120,185,0.8)'; cx.fill();
+
+    // Eye
+    cx.beginPath(); cx.arc(50,-3,4.5,0,Math.PI*2); cx.fillStyle='rgba(10,20,40,0.9)'; cx.fill();
+    cx.beginPath(); cx.arc(51.5,-4.5,1.4,0,Math.PI*2); cx.fillStyle='rgba(255,255,255,0.7)'; cx.fill();
+
+    // Smile line
+    cx.beginPath(); cx.arc(68,2,8,0.1,0.8,false);
+    cx.strokeStyle='rgba(50,100,170,0.5)'; cx.lineWidth=1.2; cx.stroke();
+
+    cx.restore();
+  }
+
+  // ── 5. OCTOPUS ──
+  function drawOctopus(cx, x, y, sc, al, t, ph){
+    cx.save(); cx.translate(x,y); cx.scale(-sc,sc);
+    cx.globalAlpha = al;
+
+    const bob = Math.sin(t*0.8+ph)*5;
+    cx.translate(0, bob);
+
+    const bodyCol = 'rgba(120,60,160,0.9)';
+    const armCol  = 'rgba(100,40,140,0.82)';
+
+    // 8 arms radiating out with wave motion
+    for(let arm=0;arm<8;arm++){
+      const baseAngle = (arm/8)*Math.PI*2 + Math.PI*0.5; // start pointing down
+      const wv = Math.sin(t*1.6+ph+arm*0.7)*18;
+      const r1 = 22, r2 = 55;
+      const ax1 = Math.cos(baseAngle)*r1, ay1 = Math.sin(baseAngle)*r1;
+      const ax2 = Math.cos(baseAngle+0.3)*r2+wv*0.3, ay2 = Math.sin(baseAngle+0.3)*r2+wv;
+      const ax3 = Math.cos(baseAngle+0.5)*r2*0.5+wv*0.5, ay3 = Math.sin(baseAngle+0.5)*r2*0.5+wv*1.2;
+
+      cx.beginPath();
+      cx.moveTo(0,0);
+      cx.quadraticCurveTo(ax1,ay1,ax2,ay2);
+      cx.lineWidth = 10;
+      cx.strokeStyle = armCol;
+      cx.lineCap = 'round';
+      cx.stroke();
+      // Taper — second thinner line
+      cx.lineWidth = 5;
+      cx.beginPath();
+      cx.moveTo(ax1,ay1);
+      cx.quadraticCurveTo((ax1+ax2)/2,(ay1+ay2)/2,ax3,ay3);
+      cx.stroke();
+
+      // Sucker dots on each arm
+      const sx = (ax1+ax2)/2+Math.cos(baseAngle+Math.PI*0.5)*5;
+      const sy = (ay1+ay2)/2+Math.sin(baseAngle+Math.PI*0.5)*5;
+      cx.beginPath(); cx.arc(sx,sy,2.5,0,Math.PI*2);
+      cx.fillStyle='rgba(200,150,220,0.7)'; cx.fill();
+    }
+
+    // Mantle (head/body)
+    const mg = cx.createRadialGradient(0,-8,2,0,-8,26);
+    mg.addColorStop(0,'rgba(160,80,200,0.95)');
+    mg.addColorStop(1,'rgba(100,40,140,0.9)');
+    cx.beginPath(); cx.ellipse(0,-10,22,28,0,0,Math.PI*2);
+    cx.fillStyle=mg; cx.fill();
+
+    // Eyes
+    cx.beginPath(); cx.ellipse(-8,-4,5,7,0,0,Math.PI*2); cx.fillStyle='rgba(255,255,220,0.9)'; cx.fill();
+    cx.beginPath(); cx.ellipse(8,-4,5,7,0,0,Math.PI*2);  cx.fillStyle='rgba(255,255,220,0.9)'; cx.fill();
+    cx.beginPath(); cx.ellipse(-8,-4,3,4.5,0,0,Math.PI*2); cx.fillStyle='rgba(20,10,40,0.9)'; cx.fill();
+    cx.beginPath(); cx.ellipse(8,-4,3,4.5,0,0,Math.PI*2);  cx.fillStyle='rgba(20,10,40,0.9)'; cx.fill();
+    cx.beginPath(); cx.arc(-7,-5,1.2,0,Math.PI*2); cx.fillStyle='rgba(255,255,255,0.8)'; cx.fill();
+    cx.beginPath(); cx.arc(9,-5,1.2,0,Math.PI*2);  cx.fillStyle='rgba(255,255,255,0.8)'; cx.fill();
+
+    // Bioluminescent spots on mantle
+    const spots = [{x:-6,y:-20},{x:5,y:-18},{x:-2,y:-8},{x:8,y:-14},{x:-9,y:-12}];
+    spots.forEach((s,i)=>{
+      const glow = (Math.sin(t*2+i+ph)*.5+.5)*.5+.1;
+      cx.beginPath(); cx.arc(s.x,s.y,2,0,Math.PI*2);
+      cx.fillStyle=`rgba(200,150,255,${glow})`; cx.fill();
+    });
+
+    cx.restore();
+  }
+
+  // ── 6. CORAL ──
+  function drawCoral(cx, x, y, sc, al, t, ph){
+    cx.save(); cx.translate(x,y); cx.scale(sc,sc);
+    cx.globalAlpha = al;
+
+    const sw = Math.sin(t*0.6+ph)*3; // gentle sway
+
+    // Multiple branch types — brain coral, branching, fan
+    // Branching coral main stem
+    function branch(bx, by, angle, depth, len){
+      if(depth <= 0) return;
+      const ex = bx + Math.cos(angle+sw*0.05)*len;
+      const ey = by + Math.sin(angle+sw*0.05)*len;
+      cx.beginPath(); cx.moveTo(bx,by); cx.lineTo(ex,ey);
+      cx.lineWidth   = depth*2.5;
+      cx.strokeStyle = `rgba(${220-depth*20},${80-depth*10},${100+depth*10},0.85)`;
+      cx.lineCap = 'round'; cx.stroke();
+      // Polyp blobs at tips
+      if(depth === 1){
+        cx.beginPath(); cx.arc(ex,ey,3.5,0,Math.PI*2);
+        const pg = (Math.sin(t*1.8+ph+bx)*.5+.5)*.6+.2;
+        cx.fillStyle=`rgba(255,120,160,${pg})`; cx.fill();
+      }
+      branch(ex,ey, angle-0.5, depth-1, len*0.72);
+      branch(ex,ey, angle+0.45,depth-1, len*0.72);
+    }
+    branch(0, 25, -Math.PI/2, 4, 18);
+    branch(-14,22, -Math.PI/2+0.3, 3, 14);
+    branch(14, 22, -Math.PI/2-0.3, 3, 14);
+
+    // Sea anemone tentacles (swaying)
+    for(let tt=0;tt<8;tt++){
+      const ta = (tt/8)*Math.PI*2;
+      const tl = 20+Math.sin(t*1.2+ph+tt)*4;
+      const tw2 = Math.sin(t*0.9+ph+tt*0.7)*6;
+      cx.beginPath();
+      cx.moveTo(Math.cos(ta)*8, Math.sin(ta)*4+10);
+      cx.quadraticCurveTo(
+        Math.cos(ta)*14+tw2, Math.sin(ta)*10+tw2,
+        Math.cos(ta)*tl+tw2, Math.sin(ta)*tl/2
+      );
+      cx.lineWidth = 2; cx.strokeStyle='rgba(255,140,100,0.65)'; cx.stroke();
+      // Tip dot
+      cx.beginPath(); cx.arc(Math.cos(ta)*tl+tw2, Math.sin(ta)*tl/2,3,0,Math.PI*2);
+      cx.fillStyle=`rgba(255,180,80,${.5+.4*Math.sin(t*2+tt)})`; cx.fill();
+    }
+
+    // Base rock
+    cx.beginPath(); cx.ellipse(0,28,28,8,0,0,Math.PI*2);
+    cx.fillStyle='rgba(80,100,120,0.6)'; cx.fill();
+
+    cx.restore();
+  }
+
+  /* ── CREATURE POPULATION ── */
+  // Each creature travels diagonally BR→TL
+  // staggered so they form a loose procession
+  const DRAW_FNS = [drawClownfish, drawTurtle, drawShark, drawDolphin, drawOctopus];
+  const LABELS   = ['Clownfish','Sea Turtle','Blue Shark','Dolphin','Octopus'];
+
+  // 8 lanes across the section height
+  const LANES = [0.10, 0.20, 0.30, 0.42, 0.52, 0.63, 0.74, 0.85];
+
+  // Each species repeats multiple times across lanes to fill screen continuously
+  // We pre-fill x positions so there's NEVER a gap — spacing ~0.18 apart
+  const CREATURES = [];
+  const SPACING = 0.17; // gap between creatures of same type in x
+  const REPEATS = 7;    // how many copies of each creature type
+
+  DRAW_FNS.forEach((fn, fi) => {
+    const lane = LANES[fi % LANES.length];
+    for(let rep = 0; rep < REPEATS; rep++){
+      // Spread across x so they tile seamlessly — offset by SPACING each rep
+      const startX = 1.05 + rep * SPACING + fi * (SPACING / DRAW_FNS.length);
+      CREATURES.push({
+        fn,
+        label: LABELS[fi],
+        x: startX,
+        y: lane + (Math.random()-0.5)*0.04,
+        sx: DX * (0.80 + Math.random()*0.38),
+        sy: 0,
+        scale: 0.75 + Math.random()*0.40,
+        phase: Math.random()*Math.PI*2,
+      });
+    }
+  });
+
+  // Extra dense clownfish school — 18 fish across multiple sub-lanes
+  const SCHOOL = Array.from({length:18},(_,i)=>({
+    x: 1.02 + i * 0.09,
+    y: 0.16 + (i%3)*0.05 + (Math.random()-.5)*0.03,
+    sx: DX*(0.85+Math.random()*.25),
+    sy: 0,
+    scale: 0.38+Math.random()*0.22,
+    phase: Math.random()*Math.PI*2,
+  }));
+
+  function wrapCreature(c){
+    // When creature exits left edge, re-enter from right
+    if(c.x < -0.25){
+      c.x = 1.20 + Math.random()*0.15;
+      c.y = Math.max(0.10, Math.min(0.90, c.y + (Math.random()-0.5)*0.05));
+    }
+  }
+
+  /* ── DEPTH-EDGE FADE ──
+     Creatures fade in as they move away from the bottom-right
+     and fade out as they approach the top-left edge,
+     creating a seamless merge with the surface canvas above */
+  function edgeAlpha(cx, cy){
+    // Fade in from right edge, fade out to left edge
+    const fadeIn  = Math.min(1, (1 - cx) * 7);
+    const fadeOut = Math.min(1, cx * 7);
+    return Math.min(fadeIn, fadeOut, 0.82);
+  }
+
+  /* ── DRAW LOOP ── */
+  function draw(){
+    t += 0.01;
+    cx.clearRect(0, 0, W, H);
+
+    // Update + draw main creatures
+    CREATURES.forEach(c => {
+      c.x += c.sx;
+      c.y += c.sy;
+      wrapCreature(c);
+      const al = edgeAlpha(c.x, c.y);
+      if(al > 0.01){
+        c.fn(cx, c.x*W, c.y*H, c.scale, al, t, c.phase);
+      }
+    });
+
+    // Update + draw school clownfish
+    SCHOOL.forEach(c => {
+      c.x += c.sx;
+      c.y += Math.sin(t*1.2+c.phase)*0.0004; // gentle bob
+      wrapCreature(c);
+      const al = edgeAlpha(c.x, c.y) * 0.65;
+      if(al > 0.01){
+        drawClownfish(cx, c.x*W, c.y*H, c.scale, al, t, c.phase);
+      }
+    });
+
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+
+/* ══════════════════════════════════════════════════════
+   THREE.JS — DEPTH PARTICLE FIELD
+   A 3D cloud of floating particles that shift colour
+   and density as the user scrolls deeper into the ocean.
+   Particles: small glowing orbs simulating bioluminescence
+   and underwater suspended matter.
+══════════════════════════════════════════════════════ */
+(function initThreeJS(){
+  if(typeof THREE === 'undefined'){ console.warn('[RAVINE] Three.js not loaded'); return; }
+
+  const canvas = document.getElementById('threeCanvas');
+  if(!canvas) return;
+
+  // ── RENDERER ──
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha:true, antialias:true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setClearColor(0x000000, 0); // transparent background
+
+  // ── SCENE + CAMERA ──
+  const scene  = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(65, window.innerWidth/window.innerHeight, 0.1, 200);
+  camera.position.set(0, 0, 30);
+
+  // ── RESIZE HANDLER ──
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  /* ── PARTICLE SYSTEM ──
+     Three layers of particles with different sizes & speeds:
+     1. Large slow "marine snow" — big soft blobs drifting down
+     2. Medium bioluminescent orbs — pulse gently
+     3. Tiny fast particles — shimmer and drift
+  */
+
+  function makeParticleLayer(count, sizeMin, sizeMax, spread, colStart, colEnd){
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(count * 3);
+    const col = new Float32Array(count * 3);
+    const sizes = new Float32Array(count);
+    const speeds = new Float32Array(count);
+    const phases = new Float32Array(count);
+
+    for(let i = 0; i < count; i++){
+      pos[i*3]   = (Math.random()-0.5)*spread;
+      pos[i*3+1] = (Math.random()-0.5)*spread;
+      pos[i*3+2] = (Math.random()-0.5)*20;
+      sizes[i]   = sizeMin + Math.random()*(sizeMax-sizeMin);
+      speeds[i]  = 0.008 + Math.random()*0.018;
+      phases[i]  = Math.random()*Math.PI*2;
+      // Colour interpolation between colStart and colEnd per particle
+      const t = Math.random();
+      col[i*3]   = colStart.r + (colEnd.r-colStart.r)*t;
+      col[i*3+1] = colStart.g + (colEnd.g-colStart.g)*t;
+      col[i*3+2] = colStart.b + (colEnd.b-colStart.b)*t;
+    }
+
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color',    new THREE.BufferAttribute(col, 3));
+    geo.setAttribute('size',     new THREE.BufferAttribute(sizes, 1));
+
+    const mat = new THREE.PointsMaterial({
+      size: 0.35,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.65,
+      sizeAttenuation: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+
+    return { points: new THREE.Points(geo, mat), speeds, phases, pos, geo };
+  }
+
+  // Layer 1 — large slow marine snow (white-ish)
+  const L1 = makeParticleLayer(280, 0.06, 0.22, 70,
+    {r:0.7,g:0.88,b:1.0},
+    {r:0.5,g:0.75,b:0.9});
+
+  // Layer 2 — medium bioluminescent cyan orbs
+  const L2 = makeParticleLayer(420, 0.04, 0.14, 60,
+    {r:0.0,g:0.78,b:1.0},
+    {r:0.0,g:1.0,b:0.7});
+
+  // Layer 3 — tiny fast shimmer
+  const L3 = makeParticleLayer(600, 0.02, 0.07, 55,
+    {r:0.2,g:0.85,b:1.0},
+    {r:0.9,g:0.35,b:0.65});
+
+  // Coral/pink deep particles for hadal zone (start invisible)
+  const L4 = makeParticleLayer(200, 0.06, 0.18, 50,
+    {r:1.0,g:0.37,b:0.63},
+    {r:0.6,g:0.0,b:0.4});
+
+  [L1,L2,L3,L4].forEach(l => scene.add(l.points));
+  L4.points.material.opacity = 0; // hidden until deep sections
+
+  // ── DEPTH-COLOUR SHIFT ──
+  // Read scroll progress and tint particles toward deep colours
+  let scrollProgress = 0;
+  window.addEventListener('scroll', () => {
+    scrollProgress = window.scrollY / (document.documentElement.scrollHeight - window.innerHeight);
+  }, {passive:true});
+
+  // ── GENTLE CAMERA FLOAT ──
+  let mouseDX = 0, mouseDY = 0;
+  document.addEventListener('mousemove', e => {
+    mouseDX = (e.clientX / window.innerWidth  - 0.5) * 0.8;
+    mouseDY = (e.clientY / window.innerHeight - 0.5) * 0.5;
+  });
+
+  // ── ANIMATE LOOP ──
+  const clock = new THREE.Clock();
+
+  function animateThree(){
+    requestAnimationFrame(animateThree);
+    const t = clock.getElapsedTime();
+    const sp = scrollProgress;
+
+    // Scroll-based camera drift — move deeper (negative Y) as user scrolls
+    camera.position.y += (-sp * 12 - camera.position.y) * 0.04;
+    // Subtle mouse parallax
+    camera.position.x += (mouseDX * 4 - camera.position.x) * 0.02;
+
+    // ── Animate Layer 1 (marine snow) — drift down slowly
+    const p1 = L1.pos;
+    for(let i=0;i<280;i++){
+      p1[i*3+1] -= L1.speeds[i] * 0.4;
+      p1[i*3]   += Math.sin(t*0.3 + L1.phases[i]) * 0.002;
+      // wrap vertically
+      if(p1[i*3+1] < -35) p1[i*3+1] = 35;
+    }
+    L1.geo.attributes.position.needsUpdate = true;
+
+    // ── Animate Layer 2 (bioluminescent) — drift up, pulse
+    const p2 = L2.pos;
+    for(let i=0;i<420;i++){
+      p2[i*3+1] += L2.speeds[i] * 0.25;
+      p2[i*3]   += Math.sin(t*0.5+L2.phases[i])*0.003;
+      p2[i*3+2] += Math.cos(t*0.3+L2.phases[i])*0.001;
+      if(p2[i*3+1] > 35) p2[i*3+1] = -35;
+    }
+    L2.geo.attributes.position.needsUpdate = true;
+    // Pulse opacity
+    L2.points.material.opacity = 0.45 + Math.sin(t*0.6)*0.2 * (1-sp*0.5);
+
+    // ── Animate Layer 3 (shimmer) — drift both directions
+    const p3 = L3.pos;
+    for(let i=0;i<600;i++){
+      p3[i*3]   += Math.sin(t*0.8+L3.phases[i])*0.004;
+      p3[i*3+1] += Math.cos(t*0.6+L3.phases[i])*0.003;
+      // Clamp to spread
+      if(Math.abs(p3[i*3])>28)   p3[i*3]   *= 0.98;
+      if(Math.abs(p3[i*3+1])>28) p3[i*3+1] *= 0.98;
+    }
+    L3.geo.attributes.position.needsUpdate = true;
+    L3.points.material.opacity = Math.max(0.1, 0.5 - sp*0.3);
+
+    // ── Layer 4 (deep pink) — fade in at 60% scroll depth
+    const deep = Math.max(0, (sp-0.6)*2.5);
+    L4.points.material.opacity = deep * 0.55;
+
+    // ── Global size shift — particles appear bigger in deeper zones
+    L2.points.material.size = 0.28 + sp*0.22;
+
+    // ── Colour temperature shift — blue → purple/pink as depth increases
+    const blueAmount  = Math.max(0, 1 - sp*1.4);
+    const pinkAmount  = Math.min(1, sp*1.2);
+    L2.points.material.color.setRGB(
+      0.0 + pinkAmount*0.4,
+      0.78 - sp*0.3,
+      1.0  - sp*0.35
+    );
+
+    // ── Scene fog deepens with scroll
+    scene.fog = new THREE.FogExp2(
+      new THREE.Color(0.01,0.04+sp*0.06,0.08+sp*0.04),
+      0.008 + sp*0.018
+    );
+
+    // ── Entire particle field slowly rotates for organic feel
+    L1.points.rotation.y = t * 0.008;
+    L2.points.rotation.y = -t * 0.006;
+    L3.points.rotation.z = t * 0.004;
+
+    renderer.render(scene, camera);
+  }
+  animateThree();
+
+  console.log('[RAVINE] Three.js particle field initialised ✓');
+})();
+
+
+
+/* ══════════════════════════════════════════════════════
+   CONTINUOUS DEPTH GRADIENT ENGINE
+   Reads exact scroll position every frame and interpolates
+   smoothly between 18 colour stops — pixel-perfect, no seams.
+   Replaces all static CSS gradients on body/sections.
+══════════════════════════════════════════════════════ */
+(function(){
+if(!el) return;
+
+  // 18 colour stops mapped to scroll progress 0→1
+  // Each stop: [progress, r, g, b]
+  const STOPS = [
+    [0.00,  10, 61,  94],   // surface — bright cerulean
+    [0.04,  8,  52,  82],
+    [0.08,  7,  45,  70],
+    [0.12,  6,  55,  80],   // slight teal shift
+    [0.18,  5,  63,  91],   // sunlit peak
+    [0.24,  6,  52,  76],
+    [0.30,  5,  48,  70],
+    [0.38,  4,  40,  58],
+    [0.46,  3,  29,  48],   // twilight — navy blue
+    [0.52,  2,  20,  36],
+    [0.58,  2,  15,  30],
+    [0.64,  1,  11,  24],   // midnight — near black-blue
+    [0.70,  1,   8,  16],
+    [0.76,  1,   6,  12],
+    [0.82,  1,   4,   8],
+    [0.88,  0,   3,   6],
+    [0.94,  0,   2,   4],   // hadal — absolute void
+    [1.00,  0,   1,   2],
+  ];
+
+  function lerp(a, b, t){ return a + (b - a) * t; }
+
+  function getColor(progress){
+    // Clamp
+    const p = Math.max(0, Math.min(1, progress));
+    // Find surrounding stops
+    let lo = STOPS[0], hi = STOPS[STOPS.length-1];
+    for(let i = 0; i < STOPS.length - 1; i++){
+      if(p >= STOPS[i][0] && p <= STOPS[i+1][0]){
+        lo = STOPS[i]; hi = STOPS[i+1]; break;
+      }
+    }
+    const span = hi[0] - lo[0];
+    const t    = span > 0 ? (p - lo[0]) / span : 0;
+    // Smooth step for extra softness
+    const st   = t * t * (3 - 2 * t);
+    return [
+      Math.round(lerp(lo[1], hi[1], st)),
+      Math.round(lerp(lo[2], hi[2], st)),
+      Math.round(lerp(lo[3], hi[3], st)),
+    ];
+  }
+
+  // We render a tall fixed gradient so the viewport
+  // always shows exactly the right colour for its position.
+  // Instead of a single solid, we paint a tiny vertical
+  // gradient covering 120% of viewport height — centred on
+  // scroll position — so any pixel of the viewport sees
+  // a locally accurate, smoothly interpolated colour.
+  let rafId;
+  let lastP = -1;
+
+  function tick(){
+    const scrollY  = window.scrollY;
+    const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+    const progress  = scrollY / maxScroll;
+
+    // Only repaint when scroll actually changed (skip identical frames)
+    if(Math.abs(progress - lastP) < 0.0002){ rafId = requestAnimationFrame(tick); return; }
+    lastP = progress;
+
+    // Sample colours at top and bottom of viewport
+    const viewH    = window.innerHeight;
+    const docH     = document.documentElement.scrollHeight;
+    const topP     = scrollY / docH;
+    const botP     = (scrollY + viewH) / docH;
+
+    const [r1,g1,b1] = getColor(topP);
+    const [r2,g2,b2] = getColor(botP);
+
+    // Apply as a CSS linear-gradient from top to bottom of viewport
+    el.style.background = `linear-gradient(to bottom, rgb(${r1},${g1},${b1}) 0%, rgb(${r2},${g2},${b2}) 100%)`;
+
+    rafId = requestAnimationFrame(tick);
+  }
+
+  tick();
+  console.log('[RAVINE] Continuous depth gradient engine running ✓');
+})();
+</script>
+</body>
+</html>
