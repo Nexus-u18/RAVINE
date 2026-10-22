@@ -9,7 +9,12 @@
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=DM+Mono:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth}
+/* Lenis smooth scroll (native scroll-behavior removed so it doesn't fight Lenis) */
+html.lenis,html.lenis body{height:auto}
+.lenis.lenis-smooth{scroll-behavior:auto!important}
+.lenis.lenis-smooth [data-lenis-prevent]{overscroll-behavior:contain}
+.lenis.lenis-stopped{overflow:hidden}
+.lenis.lenis-smooth iframe{pointer-events:none}
 body{
   background:#000810;
   color:#d4eeff;font-family:'Playfair Display',serif;overflow-x:hidden;cursor:none
@@ -291,6 +296,8 @@ section{position:relative;overflow:hidden;min-height:100vh;display:flex;align-it
 <!-- GSAP + ScrollTrigger -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<!-- Lenis smooth scroll -->
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.1.20/dist/lenis.min.js"></script>
 <!-- Three.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
@@ -1040,7 +1047,7 @@ window.addEventListener('scroll',()=>{
 
 },{passive:true});
 
-dots.forEach(d=>d.addEventListener('click',()=>document.getElementById(d.dataset.s)?.scrollIntoView({behavior:'smooth'})));
+dots.forEach(d=>d.addEventListener('click',()=>{const t=document.getElementById(d.dataset.s);if(!t)return;if(window.lenis)window.lenis.scrollTo(t,{duration:1.8});else t.scrollIntoView({behavior:'smooth'})}));
 
 /* DEPTH SLIDER */
 const sdata=[
@@ -1059,6 +1066,45 @@ function updateSlider(v){
 }
 slider?.addEventListener('input',e=>updateSlider(e.target.value));
 updateSlider(200);
+
+/* ══════════════════════════════════════════════════════
+   LENIS SMOOTH SCROLL
+   Synced with GSAP ticker so ScrollTrigger stays accurate
+══════════════════════════════════════════════════════ */
+(function initLenis(){
+  if(typeof Lenis === 'undefined'){ document.documentElement.style.scrollBehavior='smooth'; return; }
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  const lenis = new Lenis({
+    duration: 1.4,
+    easing: t => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+    smoothWheel: true,
+    wheelMultiplier: 1,
+    touchMultiplier: 1.5
+  });
+  window.lenis = lenis;
+
+  if(typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined'){
+    gsap.registerPlugin(ScrollTrigger);
+    lenis.on('scroll', ScrollTrigger.update);
+    gsap.ticker.add(time => lenis.raf(time * 1000));
+    gsap.ticker.lagSmoothing(0);
+  } else {
+    (function raf(time){ lenis.raf(time); requestAnimationFrame(raf); })(0);
+  }
+
+  // In-page anchor links (#ss etc.) glide via Lenis
+  document.querySelectorAll('a[href^="#"]').forEach(a=>{
+    a.addEventListener('click', e=>{
+      const id = a.getAttribute('href');
+      if(id.length < 2) return;
+      const target = document.querySelector(id);
+      if(!target) return;
+      e.preventDefault();
+      lenis.scrollTo(target, { duration: 2.2 });
+    });
+  });
+})();
 
 /* ══════════════════════════════════════════════════════
    GSAP + SCROLLTRIGGER ANIMATIONS
